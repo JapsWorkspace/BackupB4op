@@ -8,9 +8,9 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/sagipbayanapplogo.png",
+      "image": "./stores/assets/slogowhite.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#047857"
     },
     "ios": {
       "supportsTablet": true

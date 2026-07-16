@@ -3,35 +3,54 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Image,
   SafeAreaView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import { UserContext } from "./UserContext";
 
-const SPLASH_MIN_MS = 2200;
+const BrandMark = require("../stores/assets/slogowhite.png");
+
+const SPLASH_MIN_MS = 4200;
+const BRAND_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 
 export default function AppBootstrap({ navigation }) {
   const { user } = useContext(UserContext) || {};
+  const { width, height } = useWindowDimensions();
+  const screenScale = Math.min(Math.max(Math.min(width / 390, height / 844), 0.88), 1.14);
+  const stageWidth = Math.min(width - 24, 390);
   const fade = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.94)).current;
+  const scale = useRef(new Animated.Value(0.96)).current;
   const pulse = useRef(new Animated.Value(0)).current;
+  const brandProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fade, {
         toValue: 1,
-        duration: 650,
+        duration: 760,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.spring(scale, {
         toValue: 1,
-        friction: 7,
-        tension: 70,
+        friction: 8,
+        tension: 58,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.sequence([
+      Animated.delay(2000),
+      Animated.timing(brandProgress, {
+        toValue: 1,
+        duration: 1100,
+        easing: BRAND_EASE,
         useNativeDriver: true,
       }),
     ]).start();
@@ -40,13 +59,13 @@ export default function AppBootstrap({ navigation }) {
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 950,
+          duration: 1350,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
           toValue: 0,
-          duration: 950,
+          duration: 1350,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
@@ -55,7 +74,7 @@ export default function AppBootstrap({ navigation }) {
 
     pulseLoop.start();
     return () => pulseLoop.stop();
-  }, [fade, pulse, scale]);
+  }, [brandProgress, fade, pulse, scale]);
 
   useEffect(() => {
     let active = true;
@@ -106,48 +125,167 @@ export default function AppBootstrap({ navigation }) {
     };
   }, [navigation, user?._id, user?.id]);
 
+  const logoSize = 172 * screenScale;
+  const logoWrapSize = 204 * screenScale;
+  const glowSize = 194 * screenScale;
+  const wordFontSize = 42 * screenScale;
+  const wordLineHeight = 50 * screenScale;
+  const taglineFontSize = 10.5 * screenScale;
+  const taglineLineHeight = 16 * screenScale;
+  const wordLeft = 151 * screenScale;
+  const wordWidth = stageWidth - wordLeft + 8;
+  const stageHeight = 204 * screenScale;
+  const logoShift = -87 * screenScale;
+  const loaderSize = 64 * screenScale;
+
   const pulseScale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [1, 1.055],
   });
   const pulseOpacity = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.28, 0.08],
+    outputRange: [0.24, 0.09],
+  });
+  const logoTranslateX = brandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, logoShift],
+  });
+  const logoScale = brandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.04, 0.92],
+  });
+  const textTranslateX = brandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [62 * screenScale, 0],
+  });
+  const textOpacity = brandProgress.interpolate({
+    inputRange: [0, 0.34, 1],
+    outputRange: [0, 0, 1],
+  });
+  const textScale = brandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.985, 1],
+  });
+  const textGlowScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.025],
+  });
+  const taglineTranslateY = brandProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8 * screenScale, 0],
+  });
+  const loadingOpacity = fade.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.92],
   });
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.blobTop} />
-      <View style={styles.blobBottom} />
+      <StatusBar style="light" />
 
       <Animated.View style={[styles.content, { opacity: fade, transform: [{ scale }] }]}>
-        <View style={styles.logoWrap}>
+        <View style={[styles.brandStage, { width: stageWidth, height: stageHeight }]}>
           <Animated.View
             style={[
-              styles.logoPulse,
-              { opacity: pulseOpacity, transform: [{ scale: pulseScale }] },
+              styles.logoWrap,
+              {
+                width: logoWrapSize,
+                height: logoWrapSize,
+                transform: [
+                  { translateX: logoTranslateX },
+                  { scale: logoScale },
+                ],
+              },
             ]}
-          />
-          <View style={styles.logoCircle}>
-            <Ionicons name="shield-checkmark-outline" size={46} color="#1F5F3B" />
+          >
+            <Animated.Image
+              source={BrandMark}
+              resizeMode="contain"
+              style={[
+                styles.logoGlow,
+                {
+                  width: glowSize,
+                  height: glowSize,
+                  opacity: pulseOpacity,
+                  transform: [{ scale: pulseScale }],
+                },
+              ]}
+            />
+            <Image
+              source={BrandMark}
+              style={[styles.logoImage, { width: logoSize, height: logoSize }]}
+              resizeMode="contain"
+            />
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.wordClip,
+              {
+                left: wordLeft,
+                width: wordWidth,
+                height: 126 * screenScale,
+                opacity: textOpacity,
+                transform: [{ translateX: textTranslateX }, { scale: textScale }],
+              },
+            ]}
+          >
+            <Animated.View style={[styles.wordInner, { height: 126 * screenScale }]}>
+              <Animated.Text
+                style={[
+                  styles.wordGlow,
+                  {
+                    fontSize: wordFontSize,
+                    lineHeight: wordLineHeight,
+                    textShadowRadius: 24 * screenScale,
+                    opacity: pulseOpacity,
+                    transform: [{ scale: textGlowScale }],
+                  },
+                ]}
+              >
+                agipBayan
+              </Animated.Text>
+              <Text
+                style={[
+                  styles.wordText,
+                  { fontSize: wordFontSize, lineHeight: wordLineHeight },
+                ]}
+              >
+                agipBayan
+              </Text>
+              <Animated.Text
+                style={[
+                  styles.tagline,
+                  {
+                    fontSize: taglineFontSize,
+                    lineHeight: taglineLineHeight,
+                    opacity: textOpacity,
+                    transform: [{ translateY: taglineTranslateY }],
+                  },
+                ]}
+              >
+                READY  |  INFORMED  |  CONNECTED
+              </Animated.Text>
+            </Animated.View>
+          </Animated.View>
+        </View>
+
+        <Animated.View
+          style={[
+            styles.loadingWrap,
+            {
+              width: loaderSize,
+              height: loaderSize,
+              marginTop: 26 * screenScale,
+              opacity: loadingOpacity,
+            },
+          ]}
+        >
+          <View style={[styles.loadingShell, { width: loaderSize, height: loaderSize }]}>
+            <ActivityIndicator size="large" color="#F0C94A" />
           </View>
-        </View>
-
-        <Text style={styles.brand}>SagipBayan</Text>
-        <Text style={styles.tagline}>
-          Community Disaster Response and Safety Platform
-        </Text>
-        <Text style={styles.subtitle}>
-          Stay informed, report incidents, and receive official safety alerts.
-        </Text>
-
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color="#FFFFFF" />
-          <Text style={styles.loadingText}>Preparing safety access...</Text>
-        </View>
+        </Animated.View>
       </Animated.View>
-
-      <Text style={styles.footer}>Powered for community safety</Text>
     </SafeAreaView>
   );
 }
@@ -155,104 +293,64 @@ export default function AppBootstrap({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#1F5F3B",
+    backgroundColor: "#047857",
     overflow: "hidden",
-  },
-  blobTop: {
-    position: "absolute",
-    top: -110,
-    right: -90,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: "rgba(221,238,227,0.18)",
-  },
-  blobBottom: {
-    position: "absolute",
-    bottom: -140,
-    left: -90,
-    width: 330,
-    height: 330,
-    borderRadius: 165,
-    backgroundColor: "rgba(255,255,255,0.14)",
   },
   content: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  brandStage: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoWrap: {
-    width: 124,
-    height: 124,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoPulse: {
     position: "absolute",
-    width: 118,
-    height: 118,
-    borderRadius: 59,
-    backgroundColor: "#FFFFFF",
-  },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#123524",
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
   },
-  brand: {
-    marginTop: 22,
-    color: "#FFFFFF",
-    fontSize: 34,
-    lineHeight: 40,
+  logoGlow: {
+    position: "absolute",
+    tintColor: "#F0C94A",
+  },
+  logoImage: {},
+  wordClip: {
+    position: "absolute",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  wordInner: {
+    justifyContent: "center",
+  },
+  wordGlow: {
+    position: "absolute",
+    left: 0,
+    color: "#F0C94A",
     fontWeight: "900",
-    textAlign: "center",
+    textShadowColor: "#F0C94A",
+    textShadowOffset: { width: 0, height: 0 },
+  },
+  wordText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    textShadowColor: "rgba(0,0,0,0.12)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   tagline: {
-    marginTop: 8,
-    color: "#DDEEE3",
-    fontSize: 15,
-    lineHeight: 22,
+    marginTop: 3,
+    color: "rgba(240,201,74,0.9)",
     fontWeight: "800",
-    textAlign: "center",
   },
-  subtitle: {
-    marginTop: 10,
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  loadingRow: {
-    marginTop: 32,
-    minHeight: 46,
-    borderRadius: 23,
-    paddingHorizontal: 18,
-    backgroundColor: "rgba(18,53,36,0.45)",
-    flexDirection: "row",
+  loadingWrap: {
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
   },
-  loadingText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  footer: {
-    position: "absolute",
-    bottom: 28,
-    alignSelf: "center",
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 12,
-    fontWeight: "800",
+  loadingShell: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

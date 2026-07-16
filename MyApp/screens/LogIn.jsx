@@ -1,7 +1,6 @@
 import React, { useContext, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -12,8 +11,8 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 
-import SagipBayanLogoWhite from "../stores/assets/sagipbayanlogowhite.png";
 import api from "../lib/api";
 import styles, { COLORS } from "../Designs/LogIn";
 import { UserContext } from "./UserContext";
@@ -24,7 +23,7 @@ export default function LogIn({ navigation }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [staySignedIn, setStaySignedIn] = useState(true);
+  const [staySignedIn] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const usernameRef = useRef(null);
@@ -115,6 +114,7 @@ export default function LogIn({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.keyboard}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -127,140 +127,115 @@ export default function LogIn({ navigation }) {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.header}>
-            <View pointerEvents="none" style={styles.headerPattern}>
-              <View style={styles.headerGlow} />
-              <View style={styles.headerCircleTop} />
-              <View style={styles.headerCircleLeft} />
-              <View style={styles.headerCircleRight} />
-              <View style={styles.headerGoldDot} />
-            </View>
+          <View pointerEvents="none" style={styles.topShape} />
+          <View pointerEvents="none" style={styles.topShapeGlow} />
 
-            <Image
-              source={SagipBayanLogoWhite}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.headerTitle}>Let's get you Login!</Text>
-            <Text style={styles.headerSubtitle}>
-              Hi! Welcome back, you've been missed
-            </Text>
-          </View>
-
-          <View style={styles.panel}>
-            <View style={styles.panelContent}>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Username</Text>
-                <TextInput
-                  ref={usernameRef}
-                  style={[
-                    styles.inputField,
-                    focusedField === "username" && styles.inputFieldFocused,
-                  ]}
-                  placeholder="Enter username"
-                  placeholderTextColor={COLORS.placeholder}
-                  value={username}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onFocus={() => setFocusedField("username")}
-                  onBlur={() =>
-                    setFocusedField((current) =>
-                      current === "username" ? null : current
-                    )
-                  }
-                  onChangeText={(text) => setUsername(sanitizeUsername(text))}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                />
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Password</Text>
-                <View style={styles.passwordWrap}>
-                  <TextInput
-                    ref={passwordRef}
-                    style={[
-                      styles.inputField,
-                      styles.passwordField,
-                      focusedField === "password" && styles.inputFieldFocused,
-                    ]}
-                    placeholder="Enter password"
-                    placeholderTextColor={COLORS.placeholder}
-                    secureTextEntry={!showPassword}
-                    value={password}
-                    returnKeyType="done"
-                    onSubmitEditing={handleLogin}
-                    onFocus={() => setFocusedField("password")}
-                    onBlur={() =>
-                      setFocusedField((current) =>
-                        current === "password" ? null : current
-                      )
-                    }
-                    onChangeText={setPassword}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => setShowPassword((value) => !value)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons
-                      name={showPassword ? "eye-off-outline" : "eye-outline"}
-                      size={20}
-                      color={COLORS.muted}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.optionsRow}>
-                <TouchableOpacity
-                  style={styles.staySignedInButton}
-                  activeOpacity={0.82}
-                  onPress={() => setStaySignedIn((value) => !value)}
-                >
-                  <Ionicons
-                    name={staySignedIn ? "checkbox" : "square-outline"}
-                    size={19}
-                    color={COLORS.primary}
-                  />
-                  <Text style={styles.staySignedInText}>Remember me</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => navigation.navigate("EmailVerifyer")}>
-                  <Text style={styles.linkText}>Forgot Password?</Text>
-                </TouchableOpacity>
-              </View>
-
-              {!!error && (
-                <View style={styles.errorBox}>
-                  <Ionicons name="alert-circle-outline" size={17} color={COLORS.danger} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
-                onPress={handleLogin}
-                disabled={isSubmitting}
-                activeOpacity={0.86}
+          <View style={styles.formCard}>
+            <Text style={styles.title}>Login</Text>
+            <Text style={styles.signupText}>
+              Don't have an account?{" "}
+              <Text
+                style={styles.signupLink}
+                onPress={() => navigation.navigate("DataPrivacy")}
               >
-                {isSubmitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
-                <Text style={styles.loginButtonText}>
-                  {isSubmitting ? "Signing in..." : "Sign In"}
-                </Text>
-              </TouchableOpacity>
-
-              <Text style={styles.registerText}>
-                Don't have an account?{" "}
-                <Text
-                  style={styles.registerLink}
-                  onPress={() => navigation.navigate("DataPrivacy")}
-                >
-                  Sign Up
-                </Text>
+                sign up
               </Text>
+            </Text>
+
+            <View
+              style={[
+                styles.inputShell,
+                focusedField === "username" && styles.inputShellFocused,
+              ]}
+            >
+              <Ionicons name="person-outline" size={18} color={COLORS.muted} />
+              <TextInput
+                ref={usernameRef}
+                style={styles.inputField}
+                placeholder="Username"
+                placeholderTextColor={COLORS.placeholder}
+                value={username}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onFocus={() => setFocusedField("username")}
+                onBlur={() =>
+                  setFocusedField((current) =>
+                    current === "username" ? null : current
+                  )
+                }
+                onChangeText={(text) => setUsername(sanitizeUsername(text))}
+                onSubmitEditing={() => passwordRef.current?.focus()}
+              />
             </View>
+
+            <View
+              style={[
+                styles.inputShell,
+                styles.passwordShell,
+                focusedField === "password" && styles.inputShellFocused,
+              ]}
+            >
+              <Ionicons name="lock-closed-outline" size={18} color={COLORS.muted} />
+              <TextInput
+                ref={passwordRef}
+                style={styles.inputField}
+                placeholder="Password"
+                placeholderTextColor={COLORS.placeholder}
+                secureTextEntry={!showPassword}
+                value={password}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                onFocus={() => setFocusedField("password")}
+                onBlur={() =>
+                  setFocusedField((current) =>
+                    current === "password" ? null : current
+                  )
+                }
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword((value) => !value)}
+                activeOpacity={0.75}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={COLORS.muted}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.forgotButton}
+                onPress={() => navigation.navigate("EmailVerifyer")}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.forgotText}>FORGOT</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!!error && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={COLORS.danger} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
+              onPress={handleLogin}
+              disabled={isSubmitting}
+              activeOpacity={0.88}
+            >
+              {isSubmitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
+              <Text style={styles.loginButtonText}>
+                {isSubmitting ? "Login..." : "Login"}
+              </Text>
+              {!isSubmitting ? (
+                <Ionicons name="log-in-outline" size={21} color="#FFFFFF" />
+              ) : null}
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

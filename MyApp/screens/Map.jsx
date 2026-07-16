@@ -98,8 +98,8 @@ const SCREEN_HEIGHT = Dimensions.get("window").height;
 const PANEL_MIN_OFFSET = 0;
 const PANEL_DEFAULT_OFFSET = 300;
 const PANEL_MAX_OFFSET = 560;
-const PANEL_DRAG_THRESHOLD = 16;
-const PANEL_DRAG_CAPTURE_THRESHOLD = 22;
+const PANEL_DRAG_THRESHOLD = 24;
+const PANEL_DRAG_CAPTURE_THRESHOLD = 36;
 const FIELD_FOCUS_SCROLL_DELAY_MS = 260;
 const FIELD_FOCUS_SCROLL_OFFSET = 88;
 const INCIDENT_FORM_KEYBOARD_PADDING = 220;
@@ -4385,14 +4385,7 @@ function ModulePanel({
           Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.15
         );
       },
-      onMoveShouldSetPanResponderCapture: (_, gesture) => {
-        if (incidentFocusedFieldRef.current) return false;
-        return (
-          isNavigationPanelActiveRef.current &&
-          Math.abs(gesture.dy) > PANEL_DRAG_CAPTURE_THRESHOLD &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2
-        );
-      },
+      onMoveShouldSetPanResponderCapture: () => false,
 
       onPanResponderGrant: () => {
         translateY.stopAnimation((value) => {
@@ -4417,7 +4410,7 @@ function ModulePanel({
           PANEL_MIN_OFFSET,
           Math.min(panelMaxOffsetRef.current, lastY.current + gesture.dy)
         );
-        const projectedY = rawFinalY + Math.max(-58, Math.min(58, gesture.vy * 26));
+        const projectedY = rawFinalY + Math.max(-44, Math.min(44, gesture.vy * 18));
         const finalY = getNearestSnapPoint(projectedY, panelSnapPointsRef.current);
 
         lastY.current = finalY;
@@ -4598,7 +4591,6 @@ function ModulePanel({
       style={styles.panelWrap}
     >
       <Animated.View
-        {...(activeModule === "evac" && isNavigating ? panResponder.panHandlers : {})}
         style={[
           styles.panel,
           themedOverlay.panel,
@@ -6496,17 +6488,20 @@ const styles = StyleSheet.create({
   },
 
   panel: {
-    maxHeight: Math.min(SCREEN_HEIGHT * 0.86, 720),
+    maxHeight: Math.min(SCREEN_HEIGHT * 0.84, 700),
     backgroundColor: "rgba(255,255,255,0.99)",
-    borderRadius: 24,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderWidth: 1,
     borderColor: "rgba(220,231,225,0.95)",
     shadowColor: "#0f2319",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
     elevation: 16,
     overflow: "hidden",
   },
@@ -6532,18 +6527,18 @@ const styles = StyleSheet.create({
   },
 
   dragZone: {
-    minHeight: 46,
+    minHeight: 54,
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: -18,
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   handle: {
-    width: 62,
+    width: 68,
     height: 6,
     borderRadius: 999,
-    backgroundColor: "#9CB4A8",
+    backgroundColor: "#A7BAAF",
     alignSelf: "center",
   },
 
@@ -6605,16 +6600,18 @@ const styles = StyleSheet.create({
 
   input: {
     borderWidth: 1,
-    borderColor: "#dce7e1",
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: "#fbfdfc",
-    marginBottom: 10,
+    borderColor: "#DCE7E1",
+    borderRadius: 16,
+    padding: 13,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 11,
     fontSize: 14,
+    color: "#10251B",
   },
 
   incidentFormScrollContent: {
     paddingBottom: INCIDENT_FORM_KEYBOARD_PADDING,
+    paddingTop: 2,
   },
 
   label: {
@@ -7157,17 +7154,23 @@ barangayIncidentTooltipText: {
   panelNote: {
     marginTop: 4,
     color: "#526158",
-    lineHeight: 20,
-    fontWeight: "600",
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: "700",
   },
 
   panelSection: {
-    backgroundColor: "#f6faf8",
-    borderRadius: 18,
+    backgroundColor: "#F8FBF9",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#e3ece7",
-    padding: 14,
-    marginBottom: 12,
+    borderColor: "#E2ECE6",
+    padding: 15,
+    marginBottom: 13,
+    shadowColor: "#0f2319",
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
 
   sectionLabel: {
