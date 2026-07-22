@@ -307,6 +307,17 @@ function shouldShowFullScreenAlert(item) {
   return priority === "critical" || alertLevel === "critical";
 }
 
+function getNotificationListSignature(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => [
+      item?.id || item?._id || "",
+      item?.read ? "1" : "0",
+      item?.handledAt || "",
+      item?.createdAt || "",
+    ].join(":"))
+    .join("|");
+}
+
 function getNotificationDedupeKey(item) {
   const explicitId = item?._id || item?.id;
   if (explicitId) return `id:${String(explicitId)}`;
@@ -374,6 +385,8 @@ export function NotificationProvider({ children }) {
   const seenServerNotificationIdsRef = useRef(new Set());
   const initialFetchCompleteRef = useRef(false);
   const registeredPushUserRef = useRef("");
+  const refreshInFlightRef = useRef(null);
+  const serverNotificationsSignatureRef = useRef("");
 
   const addNotification = useCallback((event) => {
     const type = normalizeType(event?.type);
@@ -437,51 +450,63 @@ export function NotificationProvider({ children }) {
   const refreshNotifications = useCallback(async () => {
     if (!user?._id) {
       setServerNotifications([]);
-      return;
+      serverNotificationsSignatureRef.current = "";
+      return [];
     }
 
-    try {
-      const res = await api.get(`/user/${user._id}/notifications`);
-      const items = Array.isArray(res.data)
-        ? res.data.map(normalizeServerNotification)
-        : [];
-      const types = items.map((item) => item.type);
-      const guidelineNotifications = items.filter((item) =>
-        ["guideline", "drrmo_guideline"].includes(item.type)
-      );
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
 
-      console.log("[notifications] fetched count", items.length);
-      console.log("[notifications] types:", types);
-      console.log("[notifications] guideline notifications:", guidelineNotifications.length);
-
-      const previousIds = seenServerNotificationIdsRef.current;
-      const nextIds = new Set(items.map((item) => item.id));
-      const newUnreadItems = items.filter(
-        (item) => !item.read && !previousIds.has(item.id)
-      );
-
-      setServerNotifications(items);
-      setNotificationsVersion((prev) => prev + 1);
-      seenServerNotificationIdsRef.current = nextIds;
-
-      if (initialFetchCompleteRef.current) {
-        newUnreadItems
-          .slice()
-          .reverse()
-          .forEach((item) => playNotificationSoundFor(item));
-
-        const criticalAlert = newUnreadItems.find(
-          (item) => shouldShowFullScreenAlert(item) && AppState.currentState === "active"
+    const request = api
+      .get(`/user/${user._id}/notifications`)
+      .then((res) => {
+        const items = Array.isArray(res.data)
+          ? res.data.map(normalizeServerNotification)
+          : [];
+        const previousIds = seenServerNotificationIdsRef.current;
+        const nextIds = new Set(items.map((item) => item.id));
+        const newUnreadItems = items.filter(
+          (item) => !item.read && !previousIds.has(item.id)
         );
-        if (criticalAlert) {
-          setActiveCriticalAlert(criticalAlert);
+        const nextSignature = getNotificationListSignature(items);
+
+        if (serverNotificationsSignatureRef.current !== nextSignature) {
+          serverNotificationsSignatureRef.current = nextSignature;
+          setServerNotifications(items);
+          setNotificationsVersion((prev) => prev + 1);
         }
-      } else {
-        initialFetchCompleteRef.current = true;
-      }
-    } catch (err) {
-      console.log("[notifications] fetch failed:", err?.message);
-    }
+
+        seenServerNotificationIdsRef.current = nextIds;
+
+        if (initialFetchCompleteRef.current) {
+          newUnreadItems
+            .slice()
+            .reverse()
+            .forEach((item) => playNotificationSoundFor(item));
+
+          const criticalAlert = newUnreadItems.find(
+            (item) => shouldShowFullScreenAlert(item) && AppState.currentState === "active"
+          );
+          if (criticalAlert) {
+            setActiveCriticalAlert(criticalAlert);
+          }
+        } else {
+          initialFetchCompleteRef.current = true;
+        }
+
+        return items;
+      })
+      .catch((err) => {
+        console.log("[notifications] fetch failed:", err?.message);
+        return [];
+      })
+      .finally(() => {
+        refreshInFlightRef.current = null;
+      });
+
+    refreshInFlightRef.current = request;
+    return request;
   }, [user?._id]);
 
   useEffect(() => {
@@ -536,6 +561,8 @@ export function NotificationProvider({ children }) {
     seenServerNotificationIdsRef.current = new Set();
     initialFetchCompleteRef.current = false;
     registeredPushUserRef.current = "";
+    refreshInFlightRef.current = null;
+    serverNotificationsSignatureRef.current = "";
   }, [user?._id]);
 
   useEffect(() => {

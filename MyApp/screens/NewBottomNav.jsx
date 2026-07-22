@@ -1,15 +1,16 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Pressable,
-  Text,
-  View,
   Easing,
+  PanResponder,
+  Pressable,
   StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { FlatList } from "react-native-gesture-handler";
 
 import styles from "../Designs/NewBottomNav";
 import { MapContext } from "./contexts/MapContext";
@@ -49,65 +50,34 @@ const MODULES = [
 ];
 
 const NAV_REVEAL_PANEL_Y = 280;
-const ITEM_WIDTH = 156;
+const ITEM_WIDTH = 180;
+const HORIZONTAL_DRAG_THRESHOLD = 16;
 
-function DockCard({ item, index, total, isActive, onPress, theme }) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function DockCard({ item, index, total, isActive, onPress, theme, disabled }) {
   const isDark = theme.mode === "dark";
   const activeAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
-  const pressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.spring(activeAnim, {
+    Animated.timing(activeAnim, {
       toValue: isActive ? 1 : 0,
-      stiffness: 180,
-      damping: 18,
-      mass: 0.8,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
   }, [isActive, activeAnim]);
 
-  const handlePressIn = () => {
-    Animated.timing(pressAnim, {
-      toValue: 1,
-      duration: 140,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.timing(pressAnim, {
-      toValue: 0,
-      duration: 180,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const width = activeAnim.interpolate({
+  const translateY = activeAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [146, 172],
+    outputRange: [0, -7],
   });
 
-  const minHeight = activeAnim.interpolate({
+  const scale = activeAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [78, 92],
-  });
-
-  const translateY = Animated.add(
-    activeAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, -8],
-    }),
-    pressAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, -2],
-    })
-  );
-
-  const scale = pressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.02],
+    outputRange: [0.98, 1.045],
   });
 
   const backgroundColor = activeAnim.interpolate({
@@ -144,17 +114,14 @@ function DockCard({ item, index, total, isActive, onPress, theme }) {
 
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
       style={index === total - 1 ? styles.lastCardWrap : styles.cardWrap}
     >
       <Animated.View
         style={[
           styles.moduleCard,
           {
-            width,
-            minHeight,
             backgroundColor,
             borderColor,
             transform: [{ translateY }, { scale }],
@@ -189,12 +156,7 @@ function DockCard({ item, index, total, isActive, onPress, theme }) {
 
           <Animated.Text
             numberOfLines={1}
-            style={[
-              styles.moduleHelper,
-              {
-                color: helperColor,
-              },
-            ]}
+            style={[styles.moduleHelper, { color: helperColor }]}
           >
             {item.helper}
           </Animated.Text>
@@ -205,6 +167,7 @@ function DockCard({ item, index, total, isActive, onPress, theme }) {
 }
 
 export default function NewBottomNav() {
+  const { width: screenWidth } = useWindowDimensions();
   const { theme } = useTheme();
   const {
     activeMapModule,
@@ -220,14 +183,159 @@ export default function NewBottomNav() {
   } = useContext(MapContext);
 
   const [activeDockItem, setActiveDockItem] = useState("incident");
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const moduleData = useMemo(() => MODULES, []);
+  const maxOffset = useMemo(
+    () => Math.max(0, moduleData.length * ITEM_WIDTH - screenWidth + 36),
+    [moduleData.length, screenWidth]
+  );
   const navAnim = useRef(new Animated.Value(1)).current;
-  const listRef = useRef(null);
+  const railX = useRef(new Animated.Value(0)).current;
+  const releaseTimerRef = useRef(null);
+  const dragStartOffsetRef = useRef(0);
+  const currentOffsetRef = useRef(0);
+  const focusedIndexRef = useRef(0);
+  const dragFrameRef = useRef(null);
+  const pendingRailValueRef = useRef(0);
 
   const shouldRevealBottomNav =
     !activeMapModule || (typeof panelY === "number" && panelY >= NAV_REVEAL_PANEL_Y);
+
+  const lockBottomNavGesture = useCallback(() => {
+    if (releaseTimerRef.current) {
+      clearTimeout(releaseTimerRef.current);
+      releaseTimerRef.current = null;
+    }
+
+    if (typeof setIsBottomNavInteracting === "function") {
+      setIsBottomNavInteracting(true);
+    }
+  }, [setIsBottomNavInteracting]);
+
+  const releaseBottomNavGesture = useCallback(
+    (delay = 140) => {
+      if (releaseTimerRef.current) {
+        clearTimeout(releaseTimerRef.current);
+      }
+      if (dragFrameRef.current) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+
+      releaseTimerRef.current = setTimeout(() => {
+        releaseTimerRef.current = null;
+        if (typeof setIsBottomNavInteracting === "function") {
+          setIsBottomNavInteracting(false);
+        }
+      }, delay);
+    },
+    [setIsBottomNavInteracting]
+  );
+
+  const setFocusedModuleByIndex = useCallback(
+    (index) => {
+      const safeIndex = clamp(index, 0, moduleData.length - 1);
+      const focused = moduleData[safeIndex];
+
+      if (!focused || focusedIndexRef.current === safeIndex) return;
+
+      focusedIndexRef.current = safeIndex;
+      setActiveDockItem(focused.key);
+    },
+    [moduleData]
+  );
+
+  const setRailOffset = useCallback(
+    (nextOffset, animated = true) => {
+      const safeOffset = clamp(nextOffset, 0, maxOffset);
+      currentOffsetRef.current = safeOffset;
+
+      const toValue = -safeOffset;
+      if (!animated) {
+        railX.setValue(toValue);
+        return;
+      }
+
+      Animated.spring(railX, {
+        toValue,
+        stiffness: 150,
+        damping: 32,
+        mass: 0.95,
+        useNativeDriver: true,
+      }).start();
+    },
+    [maxOffset, railX, setFocusedModuleByIndex]
+  );
+
+  const snapToNearest = useCallback(
+    (offset, velocityX = 0) => {
+      const projectedOffset = offset - velocityX * 46;
+      const nearestIndex = clamp(
+        Math.round(projectedOffset / ITEM_WIDTH),
+        0,
+        moduleData.length - 1
+      );
+      setFocusedModuleByIndex(nearestIndex);
+      setRailOffset(nearestIndex * ITEM_WIDTH, true);
+    },
+    [moduleData.length, setRailOffset]
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          Math.abs(gesture.dx) > HORIZONTAL_DRAG_THRESHOLD &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > HORIZONTAL_DRAG_THRESHOLD &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
+        onPanResponderGrant: () => {
+          lockBottomNavGesture();
+          setIsDragging(true);
+          railX.stopAnimation((value) => {
+            const currentOffset = clamp(-value, 0, maxOffset);
+            currentOffsetRef.current = currentOffset;
+            dragStartOffsetRef.current = currentOffset;
+          });
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextOffset = clamp(dragStartOffsetRef.current - gesture.dx, 0, maxOffset);
+          currentOffsetRef.current = nextOffset;
+          pendingRailValueRef.current = -nextOffset;
+
+          if (!dragFrameRef.current) {
+            dragFrameRef.current = requestAnimationFrame(() => {
+              dragFrameRef.current = null;
+              railX.setValue(pendingRailValueRef.current);
+            });
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (dragFrameRef.current) {
+            cancelAnimationFrame(dragFrameRef.current);
+            dragFrameRef.current = null;
+            railX.setValue(pendingRailValueRef.current);
+          }
+          setIsDragging(false);
+          snapToNearest(currentOffsetRef.current, gesture.vx);
+          releaseBottomNavGesture(220);
+        },
+        onPanResponderTerminate: () => {
+          if (dragFrameRef.current) {
+            cancelAnimationFrame(dragFrameRef.current);
+            dragFrameRef.current = null;
+            railX.setValue(pendingRailValueRef.current);
+          }
+          setIsDragging(false);
+          snapToNearest(currentOffsetRef.current, 0);
+          releaseBottomNavGesture(220);
+        },
+      }),
+    [lockBottomNavGesture, maxOffset, railX, releaseBottomNavGesture, setFocusedModuleByIndex, snapToNearest]
+  );
 
   useEffect(() => {
     Animated.timing(navAnim, {
@@ -242,35 +350,30 @@ export default function NewBottomNav() {
     const index = moduleData.findIndex((item) => item.key === activeMapModule);
 
     if (index >= 0) {
-      setFocusedIndex(index);
+      focusedIndexRef.current = index;
       setActiveDockItem(moduleData[index].key);
-
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewPosition: 0.5,
-        });
-      });
+      requestAnimationFrame(() => setRailOffset(index * ITEM_WIDTH, true));
     }
-  }, [activeMapModule, moduleData]);
+  }, [activeMapModule, moduleData, setRailOffset]);
 
-  const lockBottomNavGesture = () => {
-    if (typeof setIsBottomNavInteracting === "function") {
-      setIsBottomNavInteracting(true);
-    }
-  };
-
-  const releaseBottomNavGesture = () => {
-    if (typeof setIsBottomNavInteracting === "function") {
-      setIsBottomNavInteracting(false);
-    }
-  };
+  useEffect(
+    () => () => {
+      if (releaseTimerRef.current) {
+        clearTimeout(releaseTimerRef.current);
+      }
+      if (dragFrameRef.current) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    },
+    []
+  );
 
   const openModule = (moduleKey, index) => {
-    releaseBottomNavGesture();
+    if (isDragging) return;
 
-    setFocusedIndex(index);
+    releaseBottomNavGesture(0);
+    focusedIndexRef.current = index;
     setActiveDockItem(moduleKey);
     setEvac(null);
     setRouteRequested(false);
@@ -279,81 +382,8 @@ export default function NewBottomNav() {
     setActiveMapModule(moduleKey);
     setPanelState("HIDDEN");
     setPanelY(null);
-
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToIndex({
-        index,
-        animated: true,
-        viewPosition: 0.5,
-      });
-    });
+    setRailOffset(index * ITEM_WIDTH, true);
   };
-
-  const moveByOne = (direction) => {
-    lockBottomNavGesture();
-
-    const nextIndex = Math.max(
-      0,
-      Math.min(moduleData.length - 1, focusedIndex + direction)
-    );
-
-    const focused = moduleData[nextIndex];
-
-    if (!focused) {
-      releaseBottomNavGesture();
-      return;
-    }
-
-    setFocusedIndex(nextIndex);
-    setActiveDockItem(focused.key);
-
-    listRef.current?.scrollToIndex({
-      index: nextIndex,
-      animated: true,
-      viewPosition: 0.5,
-    });
-
-    setTimeout(() => {
-      releaseBottomNavGesture();
-    }, 260);
-  };
-
-  const handleMomentumEnd = (event) => {
-    const offsetX = event?.nativeEvent?.contentOffset?.x || 0;
-    const index = Math.round(offsetX / ITEM_WIDTH);
-    const safeIndex = Math.max(0, Math.min(index, moduleData.length - 1));
-    const focused = moduleData[safeIndex];
-
-    setFocusedIndex(safeIndex);
-
-    if (focused) {
-      setActiveDockItem(focused.key);
-    }
-
-    releaseBottomNavGesture();
-  };
-
-  const handleScrollToIndexFailed = (info) => {
-    const safeIndex = Math.max(0, Math.min(info.index || 0, moduleData.length - 1));
-
-    setTimeout(() => {
-      listRef.current?.scrollToOffset({
-        offset: safeIndex * ITEM_WIDTH,
-        animated: true,
-      });
-    }, 80);
-  };
-
-  const renderItem = ({ item, index }) => (
-    <DockCard
-      item={item}
-      index={index}
-      total={moduleData.length}
-      isActive={activeDockItem === item.key}
-      onPress={() => openModule(item.key, index)}
-      theme={theme}
-    />
-  );
 
   return (
     <Animated.View
@@ -378,91 +408,30 @@ export default function NewBottomNav() {
           style={styles.root}
           pointerEvents="auto"
           onTouchStart={lockBottomNavGesture}
-          onTouchEnd={releaseBottomNavGesture}
-          onTouchCancel={releaseBottomNavGesture}
+          onTouchEnd={() => releaseBottomNavGesture(160)}
+          onTouchCancel={() => releaseBottomNavGesture(160)}
         >
-          <View style={localStyles.navFrame}>
-            <Pressable
-              onPress={() => moveByOne(-1)}
-              disabled={focusedIndex <= 0}
-              style={({ pressed }) => [
-                localStyles.arrowButton,
-                {
-                  backgroundColor: theme.mode === "dark" ? "rgba(18,28,24,0.96)" : theme.card,
-                  borderColor: theme.mode === "dark" ? "rgba(134,239,172,0.42)" : theme.border,
-                },
-                focusedIndex <= 0 && localStyles.arrowButtonDisabled,
-                pressed && focusedIndex > 0 && localStyles.arrowButtonPressed,
+          <View style={localStyles.navFrame} {...panResponder.panHandlers}>
+            <Animated.View
+              style={[
+                styles.stackContent,
+                localStyles.cardRail,
+                { transform: [{ translateX: railX }] },
               ]}
             >
-              <Ionicons
-                name="chevron-back"
-                size={21}
-                color={
-                  focusedIndex <= 0
-                    ? theme.subtext
-                    : theme.mode === "dark"
-                      ? "#F8FFF9"
-                      : theme.primary
-                }
-              />
-            </Pressable>
-
-            <FlatList
-              ref={listRef}
-              data={moduleData}
-              keyExtractor={(item) => item.key}
-              renderItem={renderItem}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.stackContent}
-              keyboardShouldPersistTaps="handled"
-              bounces={false}
-              decelerationRate="fast"
-              snapToInterval={ITEM_WIDTH}
-              snapToAlignment="start"
-              onTouchStart={lockBottomNavGesture}
-              onTouchEnd={releaseBottomNavGesture}
-              onTouchCancel={releaseBottomNavGesture}
-              onScrollBeginDrag={lockBottomNavGesture}
-              onScrollEndDrag={() => {}}
-              onMomentumScrollEnd={handleMomentumEnd}
-              onScrollToIndexFailed={handleScrollToIndexFailed}
-              getItemLayout={(_, index) => ({
-                length: ITEM_WIDTH,
-                offset: ITEM_WIDTH * index,
-                index,
-              })}
-              style={localStyles.list}
-            />
-
-            <Pressable
-              onPress={() => moveByOne(1)}
-              disabled={focusedIndex >= moduleData.length - 1}
-              style={({ pressed }) => [
-                localStyles.arrowButton,
-                {
-                  backgroundColor: theme.mode === "dark" ? "rgba(18,28,24,0.96)" : theme.card,
-                  borderColor: theme.mode === "dark" ? "rgba(134,239,172,0.42)" : theme.border,
-                },
-                focusedIndex >= moduleData.length - 1 && localStyles.arrowButtonDisabled,
-                pressed &&
-                  focusedIndex < moduleData.length - 1 &&
-                  localStyles.arrowButtonPressed,
-              ]}
-            >
-              <Ionicons
-                name="chevron-forward"
-                size={21}
-                color={
-                  focusedIndex >= moduleData.length - 1
-                    ? theme.subtext
-                    : theme.mode === "dark"
-                      ? "#F8FFF9"
-                      : theme.primary
-                }
-              />
-            </Pressable>
+              {moduleData.map((item, index) => (
+                <DockCard
+                  key={item.key}
+                  item={item}
+                  index={index}
+                  total={moduleData.length}
+                  isActive={activeDockItem === item.key}
+                  onPress={() => openModule(item.key, index)}
+                  theme={theme}
+                  disabled={isDragging}
+                />
+              ))}
+            </Animated.View>
           </View>
         </View>
       </SafeAreaView>
@@ -481,37 +450,14 @@ const localStyles = StyleSheet.create({
   },
 
   navFrame: {
+    width: "100%",
+    minHeight: 132,
+    overflow: "hidden",
+  },
+
+  cardRail: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-  },
-
-  list: {
-    flex: 1,
-  },
-
-  arrowButton: {
-    width: 42,
-    height: 54,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderWidth: 1,
-    borderColor: "rgba(20,83,45,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#0f2a19",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-
-  arrowButtonPressed: {
-    transform: [{ scale: 0.96 }],
-    backgroundColor: "#dcfce7",
-  },
-
-  arrowButtonDisabled: {
-    opacity: 0.48,
+    width: "auto",
+    overflow: "visible",
   },
 });

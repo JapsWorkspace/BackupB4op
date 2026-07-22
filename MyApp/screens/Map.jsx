@@ -2124,33 +2124,6 @@ const {
     [incidents]
   );
 
-  useEffect(() => {
-    const publicVisibleCount = safeArray(incidents).filter((incident) =>
-      isPublicIncident(incident)
-    ).length;
-    const invalidCoordinates = safeArray(incidents)
-      .filter((incident) => isPublicIncident(incident))
-      .filter((incident) => {
-        const latitude = toNumber(incident?.latitude ?? incident?.lat ?? incident?.location?.lat);
-        const longitude = toNumber(incident?.longitude ?? incident?.lng ?? incident?.location?.lng);
-        return !isValidCoordinate(latitude, longitude);
-      })
-      .map((incident) => ({
-        id: incident?._id,
-        latitude: incident?.latitude ?? incident?.lat ?? incident?.location?.lat,
-        longitude: incident?.longitude ?? incident?.lng ?? incident?.location?.lng,
-        status: incident?.status,
-      }));
-
-    console.log("[incidents fetched]", safeArray(incidents).length);
-    console.log("[visible incidents count]", publicVisibleCount);
-    console.log("[incidents] invalid coordinates:", invalidCoordinates);
-    console.log("[markers rendered]", normalizedIncidents.length);
-    console.log("[map updated with public incidents]", {
-      publicCount: publicVisibleCount,
-      markerCount: normalizedIncidents.length,
-    });
-  }, [incidents, normalizedIncidents.length]);
   const { floodLayers, earthquakeLayer } = useHazardLayers({
     showFloodMap: isFlood,
     showEarthquakeHazard: isEarthquake,
@@ -2815,36 +2788,17 @@ const homepageBarangays = useMemo(() => {
   );
 
   useEffect(() => {
-    console.log("[heatmap] public visible incidents:", normalizedIncidents.length);
-    console.log(
-      "[heatmap] barangay incident counts:",
-      Object.fromEntries(
-        homepageBarangays.map((barangay) => [
-          barangay.label,
-          incidentBarangayCounts[barangay.id]?.count || 0,
-        ])
-      )
-    );
-    console.log("[heatmap] max count:", maxBarangayIncidentCount);
-  }, [
-    homepageBarangays,
-    incidentBarangayCounts,
-    maxBarangayIncidentCount,
-    normalizedIncidents.length,
-  ]);
-
-  useEffect(() => {
-    if (!maxBarangayIncidentCount) {
+    if (!showHomepageBarangays || !maxBarangayIncidentCount) {
       setHeatPulseLevel(0.45);
       return undefined;
     }
 
     const intervalId = setInterval(() => {
       setHeatPulseLevel((value) => (value < 0.72 ? 0.86 : 0.45));
-    }, 1200);
+    }, 1600);
 
     return () => clearInterval(intervalId);
-  }, [maxBarangayIncidentCount]);
+  }, [maxBarangayIncidentCount, showHomepageBarangays]);
 
   const incidentClusterWarnings = useMemo(() => {
     const grouped = {};
@@ -3057,21 +3011,6 @@ const visibleIncidentMarkers = useMemo(() => {
 
 const shouldShowIncidentMarkers =
   isIncident && visibleIncidentMarkers.length > 0;
-
-  useEffect(() => {
-    if (!isIncident) return;
-
-    console.log(
-      "[incidents] marker coordinates:",
-      visibleIncidentMarkers.map((incident) => ({
-        id: incident?._id,
-        type: incident?.type,
-        barangay: incident?.barangay,
-        latitude: incident?.latitude,
-        longitude: incident?.longitude,
-      }))
-    );
-  }, [isIncident, visibleIncidentMarkers]);
 
   const focusIncidentOnMap = useCallback(
     (incident) => {
@@ -3891,6 +3830,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
                 key={place?._id || `${place.latitude}-${place.longitude}`}
                 coordinate={markerCoordinate}
                 anchor={{ x: 0.5, y: 1 }}
+                tracksViewChanges={false}
                 onPress={() => handleEvacMarkerPress(place)}
               >
                 <EvacuationPlaceMarker
@@ -3911,7 +3851,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
       anchor={{ x: 0.5, y: 0.5 }}
       centerOffset={{ x: 0, y: 0 }}
       zIndex={selectedBarangay?.id === barangay.id ? 90 : 70}
-      tracksViewChanges
+      tracksViewChanges={false}
       onPress={() => {
         if (!isEvac) {
           handleSelectBarangay(barangay);
@@ -3947,7 +3887,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
         coordinate={{ latitude, longitude }}
         anchor={{ x: 0.5, y: 1 }}
         zIndex={120}
-        tracksViewChanges
+        tracksViewChanges={false}
         title={safeDisplayText(incident?.type, "Incident")}
         description={safeDisplayText(
           incident?.location || incident?.barangay,

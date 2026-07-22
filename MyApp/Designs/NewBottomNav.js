@@ -12,11 +12,11 @@ export const COLORS = {
 };
 
 export const METRICS = {
-  CARD_WIDTH: 146,
-  CARD_WIDTH_ACTIVE: 172,
-  CARD_HEIGHT: 78,
-  CARD_HEIGHT_ACTIVE: 92,
-  CARD_GAP: 10,
+  CARD_WIDTH: 166,
+  CARD_WIDTH_ACTIVE: 166,
+  CARD_HEIGHT: 90,
+  CARD_HEIGHT_ACTIVE: 90,
+  CARD_GAP: 14,
 };
 
 export default StyleSheet.create({
@@ -31,36 +31,38 @@ export default StyleSheet.create({
   },
 
   root: {
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 14,
     backgroundColor: "transparent",
   },
 
   stackContent: {
-    paddingLeft: 14,
-    paddingRight: 44,
+    paddingLeft: 20,
+    paddingRight: 20,
     alignItems: "center",
   },
 
   cardWrap: {
-    marginRight: METRICS.CARD_GAP,
-    paddingTop: 10,
+    width: METRICS.CARD_WIDTH + METRICS.CARD_GAP,
+    paddingTop: 8,
+    alignItems: "center",
   },
 
   lastCardWrap: {
-    marginRight: 0,
-    paddingTop: 10,
+    width: METRICS.CARD_WIDTH + METRICS.CARD_GAP,
+    paddingTop: 8,
+    alignItems: "center",
   },
 
   moduleCard: {
     width: METRICS.CARD_WIDTH,
-    minHeight: METRICS.CARD_HEIGHT,
+    height: METRICS.CARD_HEIGHT,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.BORDER,
     backgroundColor: COLORS.CARD,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     flexDirection: "row",
     alignItems: "center",
 
@@ -94,9 +96,9 @@ export default StyleSheet.create({
   },
 
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
+    width: 48,
+    height: 48,
+    borderRadius: 17,
     backgroundColor: "#e7f5ed",
     alignItems: "center",
     justifyContent: "center",
@@ -119,7 +121,7 @@ export default StyleSheet.create({
   },
 
   moduleLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: COLORS.TEXT,
   },
@@ -131,7 +133,7 @@ export default StyleSheet.create({
 
   moduleHelper: {
     marginTop: 3,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.MUTED,
   },

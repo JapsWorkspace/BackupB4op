@@ -29,6 +29,18 @@ const Stack = createNativeStackNavigator();
 const MAP_UI_SCREENS = new Set(["Map"]);
 const INCIDENT_REFRESH_POLL_INTERVAL_MS = 5000;
 
+function getIncidentListSignature(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((incident) => [
+      incident?._id || "",
+      incident?.status || "",
+      incident?.updatedAt || incident?.createdAt || "",
+      incident?.latitude ?? incident?.lat ?? incident?.location?.lat ?? "",
+      incident?.longitude ?? incident?.lng ?? incident?.location?.lng ?? "",
+    ].join(":"))
+    .join("|");
+}
+
 function normalizeIncidentStatus(status) {
   return String(status || "")
     .trim()
@@ -97,40 +109,40 @@ export default function AppShell() {
   const [travelMode, setTravelMode] = useState("walking");
 
   const [incidents, setIncidents] = useState([]);
+  const incidentRefreshInFlightRef = useRef(null);
+  const incidentListSignatureRef = useRef("");
 
-  const refreshIncidents = useCallback(async (reason = "manual") => {
-    const res = await api.get("/incident/getIncidents");
-    const fetchedIncidents = Array.isArray(res.data) ? res.data : [];
-    const rawStatuses = fetchedIncidents.map((incident) => incident?.status);
-    const publicIncidents = fetchedIncidents.filter((incident) =>
-      isPublicIncident(incident)
-    );
-    const invalidCoordinateIncidents = publicIncidents.filter(
-      (incident) => !hasValidIncidentCoordinates(incident)
-    );
-    const validMarkerCount = publicIncidents.length - invalidCoordinateIncidents.length;
+  const refreshIncidents = useCallback(async () => {
+    if (incidentRefreshInFlightRef.current) {
+      return incidentRefreshInFlightRef.current;
+    }
 
-    console.log("[incidents] raw count:", fetchedIncidents.length);
-    console.log("[incidents] raw statuses:", rawStatuses);
-    console.log("[visible incidents count]", publicIncidents.length);
-    console.log(
-      "[incidents] invalid coordinates:",
-      invalidCoordinateIncidents.map((incident) => ({
-        id: incident?._id,
-        status: incident?.status,
-        latitude: incident?.latitude ?? incident?.lat ?? incident?.location?.lat,
-        longitude: incident?.longitude ?? incident?.lng ?? incident?.location?.lng,
-      }))
-    );
-    console.log("[incidents] valid marker count:", validMarkerCount);
+    const request = api
+      .get("/incident/getIncidents")
+      .then((res) => {
+        const fetchedIncidents = Array.isArray(res.data) ? res.data : [];
+        const publicIncidents = fetchedIncidents.filter((incident) =>
+          isPublicIncident(incident)
+        );
+        const nextSignature = getIncidentListSignature(publicIncidents);
 
-    setIncidents(publicIncidents);
-    console.log("[incidents refreshed dynamically]", {
-      reason,
-      publicCount: publicIncidents.length,
-      validMarkerCount,
-    });
-    return publicIncidents;
+        setIncidents((current) => {
+          if (incidentListSignatureRef.current === nextSignature) {
+            return current;
+          }
+
+          incidentListSignatureRef.current = nextSignature;
+          return publicIncidents;
+        });
+
+        return publicIncidents;
+      })
+      .finally(() => {
+        incidentRefreshInFlightRef.current = null;
+      });
+
+    incidentRefreshInFlightRef.current = request;
+    return request;
   }, []);
 
   const [showFloodMap, setShowFloodMap] = useState(false);
@@ -156,7 +168,7 @@ export default function AppShell() {
             setEvacPlaces(res.data);
           }
         })
-        .catch((err) => console.log(err));
+        .catch((err) => console.log("[evacs] fetch failed:", err?.message || err));
 
       return () => {
         mounted = false;
@@ -329,7 +341,7 @@ export default function AppShell() {
         )}
 
         {showBottomNav && (
-          <View style={styles.navWrapper} pointerEvents="box-none">
+          <View style={styles.navWrapper} pointerEvents="auto">
             <NewBottomNav />
           </View>
         )}
@@ -365,21 +377,11 @@ function RealtimeIncidentBridge() {
           ? current.map((item) => (item?._id === incident?._id ? incident : item))
           : [incident, ...current];
 
-        console.log("[map updated with public incidents]", {
-          source: eventName,
-          publicCount: next.length,
-        });
         return next;
       });
     };
 
     const refreshFromSocket = (eventName, incident) => {
-      console.log("[incident socket received]", {
-        eventName,
-        id: incident?._id || "",
-        status: incident?.status || "",
-      });
-
       mergePublicIncident(incident, eventName);
 
       const now = Date.now();
@@ -426,12 +428,6 @@ function RealtimeIncidentBridge() {
         };
 
         notificationNewHandler = (notification) => {
-          console.log("[notification received dynamically]", {
-            id: notification?._id || notification?.id || "",
-            type: notification?.type || "",
-            incidentId: notification?.incidentId || notification?.referenceId || "",
-          });
-
           addNotification?.(notification);
           refreshNotifications?.();
         };
@@ -541,12 +537,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 22,
-    height: 132,
+    bottom: 10,
+    height: 154,
     zIndex: 99999,
     elevation: 99999,
     justifyContent: "flex-end",
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(255,255,255,0.001)",
   },
 
   bottomSystemArea: {
