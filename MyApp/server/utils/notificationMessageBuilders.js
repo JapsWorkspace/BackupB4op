@@ -86,13 +86,13 @@ function buildAnnouncementSms({ title, description, category }) {
   const shortDesc = summarizeForSms(description, 70);
 
   const prefix =
-    cat.toLowerCase() === "emergency" ? "SagipBayan ALERT:" : "SagipBayan:";
+    cat.toLowerCase() === "emergency" ? "SagipBayan advisory:" : "SagipBayan:";
 
   const fallback =
     cat.toLowerCase() === "weather"
       ? "Stay alert and monitor MDRRMO updates."
       : cat.toLowerCase() === "emergency"
-      ? "Read now and follow MDRRMO instructions."
+      ? "Please read and follow MDRRMO instructions."
       : "Open the app for details.";
 
   const message = shortDesc

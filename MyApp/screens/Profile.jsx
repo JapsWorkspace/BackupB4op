@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { UserContext } from "./UserContext";
 import { useTheme } from "./contexts/ThemeContext";
+import { useAppChrome } from "./contexts/AppChromeContext";
 import api, { getApiBaseUrl } from "../lib/api";
 import { safeDisplayText } from "./utils/validation";
 
@@ -25,6 +26,7 @@ const DEFAULT_AVATAR =
 export default function Profile({ navigation }) {
   const { user, setUser } = useContext(UserContext);
   const { theme } = useTheme();
+  const { openDrawer, openNotifications, unreadCount } = useAppChrome();
   const themed = useMemo(() => createProfileThemeStyles(theme), [theme]);
   const [avatarUri, setAvatarUri] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -47,7 +49,7 @@ export default function Profile({ navigation }) {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
-      quality: 0.7,
+      quality: 1,
       allowsEditing: true,
     });
 
@@ -125,176 +127,126 @@ export default function Profile({ navigation }) {
   if (!user) return null;
 
   const isSafe = user.safetyStatus === "SAFE";
-  const statusLabel = isSafe ? "SAFE" : "NEEDS CHECK-IN";
-
+  const statusLabel = isSafe ? "Safe" : "Needs check-in";
+  const fullName = `${safeDisplayText(user.fname, "User")} ${safeDisplayText(user.lname, "")}`.trim();
+  const username = safeDisplayText(user.username, "resident");
+  const phone = safeDisplayText(user.phone, "Not set");
+  const email = safeDisplayText(user.email, "Not set");
   return (
     <ScrollView
       style={[styles.container, themed.screen]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
-        <TouchableOpacity style={[styles.headerIcon, themed.card]} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={22} color={theme.primary} />
+      <View style={[styles.dashboardHeader, { backgroundColor: theme.primary }] }>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.headerIconButton} onPress={openDrawer}>
+            <Ionicons name="menu" size={23} color={theme.buttonText} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.buttonText }]}>ACCOUNT</Text>
+          <TouchableOpacity style={styles.headerIconButton} onPress={openNotifications}>
+            <Ionicons name="notifications-outline" size={22} color={theme.buttonText} />
+            {unreadCount > 0 ? (
+              <View style={[styles.notificationBadge, { backgroundColor: theme.danger }]}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={[styles.profileCard, themed.card]}>
+        <TouchableOpacity
+          onPress={changeAvatar}
+          disabled={uploading}
+          style={[styles.avatarWrap, { backgroundColor: theme.card, borderColor: theme.card }]}
+          activeOpacity={0.86}
+        >
+          <Image source={{ uri: avatarUri || DEFAULT_AVATAR }} style={styles.avatar} />
+          {uploading && (
+            <View style={styles.overlay}>
+              <ActivityIndicator color="#fff" />
+            </View>
+          )}
+          <View style={[styles.cameraBadge, { backgroundColor: theme.primary, borderColor: theme.card }]}>
+            <Ionicons name="camera" size={17} color={theme.buttonText} />
+          </View>
         </TouchableOpacity>
 
-        <View style={styles.headerCopy}>
-          <Text style={[styles.headerTitle, themed.text]}>Account</Text>
-          <Text style={[styles.headerSubtitle, themed.subtext]}>Profile and safety identity</Text>
-        </View>
-
-        <View style={[styles.headerIconGhost, themed.softIcon]}>
-          <Ionicons name="shield-checkmark-outline" size={21} color={theme.primary} />
-        </View>
+        <Text style={[styles.profileName, themed.text]} numberOfLines={1}>{fullName}</Text>
+        <Text style={[styles.profileMeta, themed.subtext]} numberOfLines={1}>@{username}</Text>
+        <Text style={[styles.profileEmail, themed.subtext]} numberOfLines={1}>{email}</Text>
       </View>
 
-      <View style={styles.heroCard}>
-        <View style={styles.heroTop}>
-          <TouchableOpacity
-            onPress={changeAvatar}
-            disabled={uploading}
-            style={[
-              styles.avatarRing,
-              { borderColor: isSafe ? "#22C55E" : "#EF4444" },
-            ]}
-          >
-            <Image source={{ uri: avatarUri || DEFAULT_AVATAR }} style={styles.avatar} />
-
-            {uploading && (
-              <View style={styles.overlay}>
-                <ActivityIndicator color="#fff" />
-              </View>
-            )}
-
-            <View style={styles.cameraBadge}>
-              <Ionicons name="camera-outline" size={15} color="#ffffff" />
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.identityBlock}>
-            <Text style={styles.name}>
-              {safeDisplayText(user.fname, "User")} {safeDisplayText(user.lname, "")}
-            </Text>
-
-            <Text style={styles.username}>
-              @{safeDisplayText(user.username, "resident")}
-            </Text>
-
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: isSafe ? "#DCFCE7" : "#FEE2E2" },
-              ]}
-            >
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: isSafe ? "#22C55E" : "#EF4444" },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusText,
-                  { color: isSafe ? "#166534" : "#991B1B" },
-                ]}
-              >
-                {statusLabel}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.infoGrid}>
-          <View style={styles.infoTile}>
-            <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>
-              {safeDisplayText(user.phone, "Not set")}
-            </Text>
-          </View>
-
-          <View style={styles.infoTile}>
-            <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>
-              {safeDisplayText(user.email, "Not set")}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.summaryStrip}>
-        <View style={styles.summaryPill}>
-          <Ionicons name="checkmark-circle-outline" size={16} color="#166534" />
-          <Text style={styles.summaryPillText}>Account active</Text>
-        </View>
-
-        <View style={styles.summaryPillSoft}>
-          <Ionicons name="shield-half-outline" size={16} color="#6B7C3F" />
-          <Text style={styles.summaryPillSoftText}>Safety-ready profile</Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, themed.text]}>Manage account</Text>
-
-        <ActionRow
+      <View style={styles.tileGrid}>
+        <GridTile
           theme={theme}
           icon="person-outline"
-          title="Personal Details"
-          subtitle="Name, username, phone and email"
+          title="Account Details"
+          subtitle="Profile info"
           onPress={() => navigation.navigate("PersonalDetails")}
         />
-
-        <ActionRow
+        <GridTile
           theme={theme}
           icon="lock-closed-outline"
           title="Password & Security"
-          subtitle="Password rules and two-factor settings"
+          subtitle="Sign-in safety"
           onPress={() => navigation.navigate("PasswordSecurity")}
         />
-      </View>
-
-      <View style={styles.dangerCard}>
-        <View style={styles.dangerCopy}>
-          <Text style={styles.dangerTitle}>Delete account</Text>
-          <Text style={styles.dangerSub}>Permanently remove your profile data.</Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.deleteBtn}
+        <GridTile
+          theme={theme}
+          icon="shield-checkmark-outline"
+          title="Safety Status"
+          subtitle={statusLabel}
+          statusColor={isSafe ? theme.primary : theme.danger}
+        />
+        <GridTile
+          theme={theme}
+          icon="trash-outline"
+          title="Delete Account"
+          subtitle="Permanent action"
+          danger
           onPress={() =>
             Alert.alert("Delete Account", "Are you sure you want to delete your account?", [
               { text: "Cancel" },
               { text: "Delete", style: "destructive" },
             ])
           }
-        >
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
+        />
       </View>
     </ScrollView>
   );
 }
 
-function ActionRow({ icon, title, subtitle, onPress, theme }) {
+function GridTile({ icon, title, subtitle, onPress, theme, danger = false, statusColor }) {
+  const iconColor = danger ? theme.danger : statusColor || theme.primary;
+  const iconBackground =
+    danger || statusColor === theme.danger ? "#FDECEC" : theme.primarySoft;
+  const titleColor = danger ? theme.danger : theme.text;
+
+  const content = (
+    <>
+      <View style={[styles.tileIcon, { backgroundColor: iconBackground }] }>
+        <Ionicons name={icon} size={28} color={iconColor} />
+      </View>
+      <Text style={[styles.tileTitle, { color: titleColor }]} numberOfLines={2}>{title}</Text>
+      <Text style={[styles.tileSubtitle, { color: statusColor || theme.subtext }]} numberOfLines={1}>{subtitle}</Text>
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={[styles.tileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>{content}</View>;
+  }
+
   return (
     <TouchableOpacity
-      style={[
-        styles.actionRow,
-        { backgroundColor: theme.card, borderColor: theme.border },
-      ]}
+      style={[styles.tileCard, { backgroundColor: theme.card, borderColor: theme.border }]}
       onPress={onPress}
-      activeOpacity={0.84}
+      activeOpacity={0.86}
     >
-      <View style={[styles.actionIcon, { backgroundColor: theme.primarySoft }]}>
-        <Ionicons name={icon} size={20} color={theme.primary} />
-      </View>
-
-      <View style={styles.actionCopy}>
-        <Text style={[styles.actionTitle, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.actionSubtitle, { color: theme.subtext }]}>{subtitle}</Text>
-      </View>
-
-      <Ionicons name="chevron-forward" size={19} color={theme.subtext} />
+      {content}
     </TouchableOpacity>
   );
 }
@@ -302,78 +254,73 @@ function ActionRow({ icon, title, subtitle, onPress, theme }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F7F3",
   },
   content: {
-    paddingTop: 38,
-    paddingHorizontal: 18,
-    paddingBottom: 42,
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    paddingTop: 34,
+    paddingBottom: 46,
   },
-  header: {
+  dashboardHeader: {
+    height: 162,
+    marginHorizontal: -12,
+    paddingTop: 40,
+    paddingHorizontal: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerRow: {
+    height: 44,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "space-between",
   },
-  headerIcon: {
+  headerIconButton: {
     width: 44,
     height: 44,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E1EAE4",
-  },
-  headerIconGhost: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: "#E7F4EA",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCopy: {
-    flex: 1,
-    marginHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   headerTitle: {
-    fontSize: 24,
+    flex: 1,
+    textAlign: "center",
+    fontSize: 15,
     fontWeight: "900",
-    color: "#10251B",
   },
-  headerSubtitle: {
-    marginTop: 2,
-    color: "#647067",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  heroCard: {
-    backgroundColor: "#355A2C",
-    borderRadius: 24,
-    padding: 18,
-    shadowColor: "#16311E",
+  profileCard: {
+    alignItems: "center",
+    marginTop: -30,
+    marginBottom: 22,
+    minHeight: 204,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingTop: 30,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    shadowColor: "#10251B",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.08,
     shadowRadius: 16,
-    elevation: 4,
+    elevation: 3,
   },
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatarRing: {
-    width: 102,
-    height: 102,
-    borderRadius: 30,
+  avatarWrap: {
+    width: 106,
+    height: 106,
+    borderRadius: 53,
     borderWidth: 3,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    marginBottom: 11,
+    shadowColor: "#10251B",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 2,
   },
   avatar: {
-    width: 92,
-    height: 92,
-    borderRadius: 26,
+    width: "100%",
+    height: "100%",
+    borderRadius: 53,
     backgroundColor: "#E5E7EB",
   },
   overlay: {
@@ -382,201 +329,83 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 26,
+    borderRadius: 53,
   },
   cameraBadge: {
     position: "absolute",
-    bottom: -4,
-    right: -4,
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "#14532D",
+    right: -2,
+    bottom: 5,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
   },
-  identityBlock: {
-    flex: 1,
-    marginLeft: 14,
-    minWidth: 0,
-  },
-  name: {
-    fontSize: 21,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-  username: {
-    marginTop: 4,
-    color: "rgba(255,255,255,0.76)",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  statusPill: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 11,
+  profileName: {
+    alignSelf: "stretch",
+    textAlign: "center",
+    fontSize: 16,
     fontWeight: "900",
   },
-  infoGrid: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 16,
+  profileMeta: {
+    alignSelf: "stretch",
+    marginTop: 3,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "800",
   },
-  infoTile: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    padding: 12,
-  },
-  infoLabel: {
+  profileEmail: {
+    alignSelf: "stretch",
+    marginTop: 2,
+    textAlign: "center",
     fontSize: 11,
-    color: "rgba(255,255,255,0.72)",
-    fontWeight: "800",
-    textTransform: "uppercase",
+    fontWeight: "700",
   },
-  infoValue: {
-    marginTop: 5,
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  summaryStrip: {
+  tileGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginTop: 14,
-    marginBottom: 8,
+    justifyContent: "space-between",
+    rowGap: 14,
   },
-  summaryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#E8F5EA",
+  tileCard: {
+    width: "48%",
+    minHeight: 128,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#CFE7D3",
-  },
-  summaryPillText: {
-    marginLeft: 6,
-    color: "#166534",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  summaryPillSoft: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#F3F1DF",
-    borderWidth: 1,
-    borderColor: "#E8E0B5",
-  },
-  summaryPillSoftText: {
-    marginLeft: 6,
-    color: "#6B7C3F",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  section: {
-    marginTop: 18,
-  },
-  sectionTitle: {
-    marginBottom: 10,
-    color: "#10251B",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 15,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E1EAE4",
-    shadowColor: "#0F2319",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  actionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: "#E7F4EA",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+    shadowColor: "#10251B",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  actionCopy: {
-    flex: 1,
-  },
-  actionTitle: {
-    color: "#10251B",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  actionSubtitle: {
-    marginTop: 3,
-    color: "#6B7280",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  dangerCard: {
-    marginTop: 14,
-    flexDirection: "row",
+  tileIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     alignItems: "center",
-    backgroundColor: "#FFF5F5",
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#FECACA",
+    justifyContent: "center",
+    marginBottom: 11,
   },
-  dangerCopy: {
-    flex: 1,
-  },
-  dangerTitle: {
-    color: "#991B1B",
+  tileTitle: {
+    alignSelf: "stretch",
+    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: "900",
-    fontSize: 14,
   },
-  dangerSub: {
-    color: "#B45353",
-    fontSize: 12,
-    marginTop: 3,
-    fontWeight: "600",
-  },
-  deleteBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "#FEE2E2",
-  },
-  deleteText: {
-    color: "#B91C1C",
-    fontWeight: "900",
+  tileSubtitle: {
+    alignSelf: "stretch",
+    marginTop: 4,
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
-
 function createProfileThemeStyles(theme) {
   return StyleSheet.create({
     screen: {

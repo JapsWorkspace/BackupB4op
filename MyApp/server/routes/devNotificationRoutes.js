@@ -8,7 +8,7 @@ router.post("/sms/test", async (req, res) => {
   try {
     const result = await sendUniSms({
       to: req.body?.phone,
-      message: req.body?.message || "SagipBayan: Test SMS alert.",
+      message: req.body?.message || "SagipBayan: SMS test from SagipBayan.",
     });
 
     res.status(result.ok ? 200 : 400).json(result);

@@ -232,6 +232,7 @@ const ROUTES = [
   { path: "/admin/accounts", element: <AdminAccounts />, roles: ADMIN_ONLY },
   { path: "/admin/analytics", element: <AdminAnalytics />, roles: ADMIN_ONLY },
   { path: "/admin/announcements", element: <Announcement />, roles: ADMIN_ONLY },
+  { path: "/admin/guidelines", element: <HomeGuidelines />, roles: ADMIN_ONLY },
   { path: "/admin/notifications", element: <Notification />, roles: ADMIN_ONLY },
   { path: "/accountant/dashboard", element: <AccountantDashboard />, roles: ACCOUNTANT_ONLY },
   { path: "/accountant/analytics", element: <AdminAnalytics />, roles: ACCOUNTANT_ONLY },

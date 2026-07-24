@@ -31,6 +31,7 @@ import MapView, {
 import { Picker } from "@react-native-picker/picker";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import * as turf from "@turf/turf";
 
 import api, { postMultipart } from "../lib/api";
@@ -3445,56 +3446,65 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
   const pickIncidentImage = useCallback(async () => {
     if (Platform.OS === "web") return;
 
-    const ImagePicker = await import("expo-image-picker");
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (permission.status !== "granted") {
-      Alert.alert("Photo Permission Needed", "Allow photo access to upload incident images.");
-      return;
+      if (!permission.granted && permission.status !== "granted") {
+        Alert.alert("Photo Permission Needed", "Allow photo access to upload incident images.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        selectionLimit: INCIDENT_IMAGE_LIMIT,
+        quality: 0.7,
+        legacy: Platform.OS === "android",
+      });
+
+      if (result.canceled || !Array.isArray(result.assets) || !result.assets[0]?.uri) {
+        return;
+      }
+
+      const pickedImages = result.assets
+        .slice(0, INCIDENT_IMAGE_LIMIT)
+        .map(normalizeIncidentPickerAsset)
+        .filter(Boolean);
+
+      applyIncidentImages(pickedImages, true);
+    } catch (error) {
+      console.log("[incident image picker failed]", error?.message || error);
+      Alert.alert("Upload failed", "Unable to open your photo gallery right now.");
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: INCIDENT_IMAGE_LIMIT,
-      quality: 0.7,
-    });
-
-    if (result.canceled || !Array.isArray(result.assets) || !result.assets[0]?.uri) {
-      return;
-    }
-
-    const pickedImages = result.assets
-      .slice(0, INCIDENT_IMAGE_LIMIT)
-      .map(normalizeIncidentPickerAsset)
-      .filter(Boolean);
-
-    applyIncidentImages(pickedImages, true);
   }, [applyIncidentImages]);
 
   const takeIncidentPhoto = useCallback(async () => {
     if (Platform.OS === "web") return;
 
-    const ImagePicker = await import("expo-image-picker");
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
 
-    if (permission.status !== "granted") {
-      Alert.alert("Camera Permission Needed", "Allow camera access to take incident photos.");
-      return;
+      if (!permission.granted && permission.status !== "granted") {
+        Alert.alert("Camera Permission Needed", "Allow camera access to take incident photos.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.7,
+      });
+
+      if (result.canceled || !Array.isArray(result.assets) || !result.assets[0]?.uri) {
+        return;
+      }
+
+      const photo = normalizeIncidentPickerAsset(result.assets[0], 0);
+      applyIncidentImages(photo ? [photo] : [], false);
+    } catch (error) {
+      console.log("[incident camera picker failed]", error?.message || error);
+      Alert.alert("Camera failed", "Unable to open your camera right now.");
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 0.7,
-    });
-
-    if (result.canceled || !Array.isArray(result.assets) || !result.assets[0]?.uri) {
-      return;
-    }
-
-    const photo = normalizeIncidentPickerAsset(result.assets[0], 0);
-    applyIncidentImages(photo ? [photo] : [], false);
   }, [applyIncidentImages]);
 
   const removeIncidentImage = useCallback((uri) => {

@@ -18,7 +18,7 @@ router.post("/test", requireNonProduction, async (req, res) => {
   try {
     const maxLength = Number(process.env.SMS_MAX_LENGTH || 150);
     const message = trimSmsMessage(
-      req.body?.message || "SagipBayan: Test SMS alert.",
+      req.body?.message || "SagipBayan: SMS test from SagipBayan.",
       Number.isFinite(maxLength) && maxLength > 0 ? maxLength : 150
     );
 

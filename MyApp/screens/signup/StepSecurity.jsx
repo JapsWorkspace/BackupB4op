@@ -44,8 +44,8 @@ export default function StepSecurity({
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const { scrollRef, contentRef, registerInput, registerField, scrollToInput } =
-    useFormAutoScroll(90);
+  const { scrollRef, contentRef, registerInput, registerField, scrollToInput, handleScroll } =
+    useFormAutoScroll(230);
 
   /* ================= CLEAN VALUES ================= */
   const cleanPassword = password.trim();
@@ -104,17 +104,21 @@ export default function StepSecurity({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{
           flexGrow: 1,
           padding: 24,
-          paddingBottom: 100,
+          paddingBottom: 260,
           backgroundColor: "#fff",
         }}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         <View ref={contentRef} collapsable={false}>
         <Image

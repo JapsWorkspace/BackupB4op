@@ -21,6 +21,7 @@ import AppTopBar from "./components/AppTopBar";
 import AppDrawer from "./components/AppDrawer";
 import LogoutModal from "./components/LogoutModal";
 import { safeDisplayText } from "./utils/validation";
+import { AppChromeContext } from "./contexts/AppChromeContext";
 
 const MAP_UI_SCREENS = new Set(["Map", "Connection"]);
 
@@ -84,6 +85,18 @@ export default function AppLayout({
     onDrawerOpenChange?.(open);
   };
 
+  const appChromeValue = useMemo(
+    () => ({
+      openDrawer: () => setDrawerOpen(true),
+      openNotifications: () => {
+        setNotificationsOpen((prev) => !prev);
+        markAllRead();
+      },
+      unreadCount,
+    }),
+    [markAllRead, unreadCount]
+  );
+
   const resetMapHome = () => {
     setActiveMapModule(null);
     setPanelState("HIDDEN");
@@ -96,7 +109,9 @@ export default function AppLayout({
 
   return (
     <View style={[styles.root, themed.root]}>
-      <View style={styles.content}>{children}</View>
+      <AppChromeContext.Provider value={appChromeValue}>
+        <View style={styles.content}>{children}</View>
+      </AppChromeContext.Provider>
 
       {Platform.OS === "android" && (
         <View pointerEvents="none" style={[styles.androidNavBackdrop, themed.androidNavBackdrop]} />

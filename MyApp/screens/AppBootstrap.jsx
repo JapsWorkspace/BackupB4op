@@ -125,18 +125,21 @@ export default function AppBootstrap({ navigation }) {
     };
   }, [navigation, user?._id, user?.id]);
 
-  const logoSize = 172 * screenScale;
-  const logoWrapSize = 204 * screenScale;
-  const glowSize = 194 * screenScale;
-  const wordFontSize = 42 * screenScale;
-  const wordLineHeight = 50 * screenScale;
-  const taglineFontSize = 10.5 * screenScale;
-  const taglineLineHeight = 16 * screenScale;
-  const wordLeft = 151 * screenScale;
-  const wordWidth = stageWidth - wordLeft + 8;
-  const stageHeight = 204 * screenScale;
-  const logoShift = -87 * screenScale;
-  const loaderSize = 64 * screenScale;
+  const finalScale = Math.min(screenScale, Math.max((width - 44) / 380, 0.78));
+  const logoSize = 190 * finalScale;
+  const logoWrapSize = 224 * finalScale;
+  const glowSize = 216 * finalScale;
+  const wordFontSize = Math.min(48 * finalScale, (stageWidth - 158 * finalScale) / 5.25);
+  const wordLineHeight = wordFontSize * 1.16;
+  const taglineFontSize = Math.min(12.5 * finalScale, wordFontSize * 0.28);
+  const taglineLineHeight = taglineFontSize * 1.42;
+  const lockupVisualBiasX = -6 * finalScale;
+  const finalLogoCenterX = stageWidth / 2 - 104 * finalScale + lockupVisualBiasX;
+  const wordLeft = finalLogoCenterX + 54 * finalScale;
+  const wordWidth = Math.max(stageWidth - wordLeft, 170 * finalScale);
+  const stageHeight = 218 * finalScale;
+  const logoShift = finalLogoCenterX - stageWidth / 2;
+  const loaderSize = 64 * finalScale;
 
   const pulseScale = pulse.interpolate({
     inputRange: [0, 1],
@@ -152,11 +155,11 @@ export default function AppBootstrap({ navigation }) {
   });
   const logoScale = brandProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [1.04, 0.92],
+    outputRange: [1.04, 0.98],
   });
   const textTranslateX = brandProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [62 * screenScale, 0],
+    outputRange: [62 * finalScale, 0],
   });
   const textOpacity = brandProgress.interpolate({
     inputRange: [0, 0.34, 1],
@@ -172,7 +175,7 @@ export default function AppBootstrap({ navigation }) {
   });
   const taglineTranslateY = brandProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [8 * screenScale, 0],
+    outputRange: [8 * finalScale, 0],
   });
   const loadingOpacity = fade.interpolate({
     inputRange: [0, 1],
@@ -224,20 +227,20 @@ export default function AppBootstrap({ navigation }) {
               {
                 left: wordLeft,
                 width: wordWidth,
-                height: 126 * screenScale,
+                height: 146 * finalScale,
                 opacity: textOpacity,
                 transform: [{ translateX: textTranslateX }, { scale: textScale }],
               },
             ]}
           >
-            <Animated.View style={[styles.wordInner, { height: 126 * screenScale }]}>
+            <Animated.View style={[styles.wordInner, { height: 146 * finalScale }]}>
               <Animated.Text
                 style={[
                   styles.wordGlow,
                   {
                     fontSize: wordFontSize,
                     lineHeight: wordLineHeight,
-                    textShadowRadius: 24 * screenScale,
+                    textShadowRadius: 24 * finalScale,
                     opacity: pulseOpacity,
                     transform: [{ scale: textGlowScale }],
                   },
@@ -253,19 +256,6 @@ export default function AppBootstrap({ navigation }) {
               >
                 agipBayan
               </Text>
-              <Animated.Text
-                style={[
-                  styles.tagline,
-                  {
-                    fontSize: taglineFontSize,
-                    lineHeight: taglineLineHeight,
-                    opacity: textOpacity,
-                    transform: [{ translateY: taglineTranslateY }],
-                  },
-                ]}
-              >
-                READY  |  INFORMED  |  CONNECTED
-              </Animated.Text>
             </Animated.View>
           </Animated.View>
         </View>
@@ -276,7 +266,7 @@ export default function AppBootstrap({ navigation }) {
             {
               width: loaderSize,
               height: loaderSize,
-              marginTop: 26 * screenScale,
+              marginTop: 26 * finalScale,
               opacity: loadingOpacity,
             },
           ]}
@@ -341,7 +331,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   tagline: {
-    marginTop: 3,
+    marginTop: 5,
     color: "rgba(240,201,74,0.9)",
     fontWeight: "800",
   },

@@ -29,8 +29,8 @@ export default function StepPersonal({
   const [localLName, setLocalLName] = useState(lName);
   const [localUsername, setLocalUsername] = useState(username);
   const [focused, setFocused] = useState({});
-  const { scrollRef, contentRef, registerInput, registerField, scrollToInput } =
-    useFormAutoScroll(90);
+  const { scrollRef, contentRef, registerInput, registerField, scrollToInput, handleScroll } =
+    useFormAutoScroll(230);
 
   const setFocus = (key, value) =>
     setFocused((prev) => ({ ...prev, [key]: value }));
@@ -65,12 +65,16 @@ export default function StepPersonal({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.container, { paddingBottom: 64 }]}
+        contentContainerStyle={[styles.container, { paddingBottom: 260 }]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         <View ref={contentRef} collapsable={false}>
           <Image

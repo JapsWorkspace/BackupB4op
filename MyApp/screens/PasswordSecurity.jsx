@@ -17,9 +17,9 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../lib/api";
 import { UserContext } from "./UserContext";
 import { useTheme } from "./contexts/ThemeContext";
-import PasswordStrengthMeter from "./components/PasswordStrengthMeter";
 import styles, { COLORS } from "../Designs/PasswordSecurity";
 import { getPasswordError, getPasswordRequirements } from "./utils/validation";
+import useFormAutoScroll from "./hooks/useFormAutoScroll";
 
 function getUserId(user) {
   return user?._id || user?.id || user?.userId || "";
@@ -49,6 +49,14 @@ export default function PasswordSecurity({ navigation }) {
   const [isToggling2FA, setIsToggling2FA] = useState(false);
 
   const userId = getUserId(user);
+
+  const {
+    scrollRef,
+    contentRef,
+    registerField,
+    scrollToInput,
+    handleScroll,
+  } = useFormAutoScroll(230);
 
   const handleNewPassword = (text) => {
     const cleanText = text.trim();
@@ -220,28 +228,31 @@ export default function PasswordSecurity({ navigation }) {
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <ScrollView
+        ref={scrollRef}
         style={[styles.phone, themed.screen]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 260 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
+        <View ref={contentRef} collapsable={false}>
         <View style={styles.headerRow}>
           <TouchableOpacity
-            style={[styles.backBtn, themed.card]}
+            style={styles.backBtn}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="chevron-back" size={22} color={theme.primary} />
+            <Ionicons name="arrow-back" size={21} color={theme.text} />
           </TouchableOpacity>
 
           <View style={styles.headerCopy}>
             <Text style={[styles.headerTitle, themed.text]}>Password & Security</Text>
-            <Text style={[styles.subText, themed.subtext]}>
-              Protect account access and sign-in recovery.
-            </Text>
           </View>
+
+          <View style={styles.headerRightSpacer} />
         </View>
 
-        <View style={[styles.securityHero, themed.card]}>
+        <View style={styles.securityHero}>
           <View style={[styles.heroIcon, themed.softCard]}>
             <Ionicons
               name="shield-checkmark-outline"
@@ -251,16 +262,16 @@ export default function PasswordSecurity({ navigation }) {
           </View>
 
           <View style={styles.heroCopy}>
-            <Text style={[styles.heroTitle, themed.text]}>Security center</Text>
+            <Text style={[styles.heroTitle, themed.text]}>Set Your Password</Text>
             <Text style={[styles.heroText, themed.subtext]}>
-              Use a unique password and keep two-factor authentication ready for
-              sensitive changes.
+              In order to keep your account safe you need
+              to create a strong password.
             </Text>
           </View>
         </View>
 
         <View style={[styles.sectionCard, themed.card]}>
-          <Text style={[styles.sectionTitle, themed.text]}>Change password</Text>
+          <Text style={[styles.sectionTitle, themed.text]}>Password</Text>
 
           <PasswordField
             label="Current Password"
@@ -273,6 +284,8 @@ export default function PasswordSecurity({ navigation }) {
             onToggleVisibility={() => setShowCurrentPassword((prev) => !prev)}
             theme={theme}
             themed={themed}
+            fieldRef={registerField("currentPassword")}
+            onFocus={() => scrollToInput("currentPassword")}
           />
 
           <PasswordField
@@ -283,20 +296,13 @@ export default function PasswordSecurity({ navigation }) {
             onToggleVisibility={() => setShowNewPassword((prev) => !prev)}
             theme={theme}
             themed={themed}
+            fieldRef={registerField("newPassword")}
+            onFocus={() => scrollToInput("newPassword")}
           />
 
           {newPasswordError ? (
             <Text style={styles.error}>{newPasswordError}</Text>
           ) : null}
-
-          <PasswordStrengthMeter
-            password={newPassword}
-            style={localStyles.strengthMeter}
-            textColor={theme.subtext}
-            mutedColor={theme.subtext}
-            surfaceColor={theme.surfaceAlt}
-            borderColor={theme.border}
-          />
 
           <PasswordField
             label="Confirm Password"
@@ -306,6 +312,8 @@ export default function PasswordSecurity({ navigation }) {
             onToggleVisibility={() => setShowConfirmPassword((prev) => !prev)}
             theme={theme}
             themed={themed}
+            fieldRef={registerField("confirmPassword")}
+            onFocus={() => scrollToInput("confirmPassword")}
           />
 
           {confirmPasswordError ? (
@@ -315,6 +323,9 @@ export default function PasswordSecurity({ navigation }) {
           {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
 
           <View style={styles.ruleGrid}>
+            <Text style={[styles.ruleHeader, themed.subtext]}>
+              YOUR PASSWORD MUST CONTAIN
+            </Text>
             {getPasswordRequirements(newPassword).map((item) => (
               <Rule key={item.key} checked={item.met} text={item.label} theme={theme} />
             ))}
@@ -326,8 +337,8 @@ export default function PasswordSecurity({ navigation }) {
             onPress={updatePassword}
             disabled={isSaving}
           >
-            <Text style={styles.buttonText}>
-              {isSaving ? "Saving..." : "Save Security Settings"}
+            <Text style={[styles.buttonText, { color: theme.buttonText }]}>
+              {isSaving ? "Saving..." : "Save Password"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -356,6 +367,7 @@ export default function PasswordSecurity({ navigation }) {
             {twoFactorEnabled ? "Enabled" : "Disabled"}
           </Text>
         </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -369,9 +381,11 @@ function PasswordField({
   onToggleVisibility,
   theme,
   themed,
+  fieldRef,
+  onFocus,
 }) {
   return (
-    <View style={styles.inputWrap}>
+    <View ref={fieldRef} collapsable={false} style={styles.inputWrap}>
       <Text style={[styles.inputLabel, themed.text]}>{label}</Text>
 
       <View style={localStyles.passwordFieldShell}>
@@ -382,6 +396,7 @@ function PasswordField({
           secureTextEntry={!visible}
           value={value}
           onChangeText={onChangeText}
+          onFocus={onFocus}
         />
 
         <TouchableOpacity
@@ -394,9 +409,6 @@ function PasswordField({
             size={18}
             color={theme.primary}
           />
-          <Text style={[localStyles.passwordToggleText, { color: theme.primary }]}>
-            {visible ? "Hide" : "Show"}
-          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -404,14 +416,14 @@ function PasswordField({
 }
 
 function Rule({ checked, text, theme }) {
+  const color = checked ? theme.primary : theme.danger;
+
   return (
-    <View style={[styles.rulePill, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }, checked && styles.rulePillOk]}>
-      <Ionicons
-        name={checked ? "checkmark-circle" : "ellipse-outline"}
-        size={14}
-        color={checked ? "#166534" : "#94A3B8"}
-      />
-      <Text style={[styles.ruleText, { color: theme.subtext }, checked && styles.ruleTextOk]}>{text}</Text>
+    <View style={styles.rulePill}>
+      <View style={[styles.ruleDot, { backgroundColor: color }]} />
+      <Text style={[styles.ruleText, { color: theme.subtext }, checked && { color: theme.text }]}>
+        {text}
+      </Text>
     </View>
   );
 }
@@ -422,28 +434,16 @@ const localStyles = StyleSheet.create({
     justifyContent: "center",
   },
   passwordInput: {
-    paddingRight: 76,
+    paddingRight: 48,
   },
   passwordToggle: {
     position: "absolute",
-    right: 12,
+    right: 10,
+    width: 34,
     height: 34,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "#EFF5EF",
-    borderWidth: 1,
-    borderColor: "#DCE7DD",
-    flexDirection: "row",
+    borderRadius: 17,
     alignItems: "center",
-  },
-  passwordToggleText: {
-    marginLeft: 4,
-    color: "#355A2C",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  strengthMeter: {
-    marginTop: 10,
+    justifyContent: "center",
   },
 });
 

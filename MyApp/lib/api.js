@@ -1,9 +1,9 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 
-export const LAN_IP = " 192.168.1.149";
+export const LAN_IP = "192.168.1.25";
 export const PORT = 8000;
 export const NGROK_URL = ""; // Example: "https://xxxx.ngrok.app"
 export const HEALTH_PATH = "/health";
@@ -29,14 +29,14 @@ const ENV_BASE =
  * const FORCE_BASE = `http://10.0.2.2:${PORT}`;
  */
 const FORCE_BASE = "";
-const USE_REMOTE_FALLBACK_IN_DEV = true;
+const USE_REMOTE_FALLBACK_IN_DEV = false;
 
 const remoteBase = PROD_BASE;
 const physicalDeviceBases = [LAN_IP]
   .map((ip) => String(ip || "").trim())
   .filter(Boolean)
   .map((ip) => `http://${ip}:${PORT}`);
-const emulatorBase = "";
+const emulatorBase = Platform.OS === "android" ? `http://10.0.2.2:${PORT}` : "";
 
 function uniqueBases(values) {
   return [...new Set(values.filter(Boolean).map((base) => base.replace(/\/+$/, "")))];
@@ -48,16 +48,16 @@ const candidatesDev = uniqueBases(
         FORCE_BASE,
         ENV_BASE,
         NGROK_URL,
-        remoteBase,
         emulatorBase,
         ...physicalDeviceBases,
+        remoteBase,
       ]
     : [
         FORCE_BASE,
         ENV_BASE,
         NGROK_URL,
-        remoteBase,
         ...physicalDeviceBases,
+        remoteBase,
       ]
 );
 

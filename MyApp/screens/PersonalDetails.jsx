@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
@@ -34,6 +35,9 @@ const DISTRICT_OPTIONS = [
   "District 4",
 ];
 
+
+const DEFAULT_AVATAR =
+  "https://ui-avatars.com/api/?background=E5E7EB&color=6B7280&rounded=true&name=User";
 const BARANGAY_BY_DISTRICT = {
   "District 1": [
     "Bagong Sikat",
@@ -114,7 +118,7 @@ export default function PersonalDetails({ navigation }) {
 
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const { scrollRef, registerInput, scrollToInput } = useFormAutoScroll(36);
+  const { scrollRef, contentRef, registerInput, registerField, scrollToInput, handleScroll } = useFormAutoScroll(230);
 
   const userId = getUserId(user);
 
@@ -126,7 +130,11 @@ export default function PersonalDetails({ navigation }) {
     return <Text>No user logged in</Text>;
   }
 
-  const onChangeDistrict = (value) => {
+  
+  const fullName = `${safeDisplayText(user?.fname, "User")} ${safeDisplayText(user?.lname, "")}`.trim();
+  const email = safeDisplayText(user?.email, "No email");
+  const avatarSource = user?.avatar || `${DEFAULT_AVATAR}&name=${encodeURIComponent(fullName || "User")}`;
+const onChangeDistrict = (value) => {
     setDistrict(value);
 
     if (!value) {
@@ -252,192 +260,187 @@ export default function PersonalDetails({ navigation }) {
       <ScrollView
         ref={scrollRef}
         style={[styles.phone, themed.screen]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 260 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={[styles.backBtn, themed.card]}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="chevron-back" size={22} color={theme.primary} />
-          </TouchableOpacity>
-
-          <View style={styles.headerCopy}>
-            <Text style={[styles.headerTitle, themed.text]}>Personal Details</Text>
-            <Text style={[styles.subText, themed.subtext]}>
-              Keep contact and address details accurate for alerts and recovery.
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.summaryCard, themed.card]}>
-          <View style={[styles.summaryIcon, themed.softCard]}>
-            <Ionicons name="id-card-outline" size={23} color={theme.primary} />
-          </View>
-
-          <View style={styles.summaryCopy}>
-            <Text style={[styles.summaryTitle, themed.text]}>
-              {safeDisplayText(user.fname, "User")}{" "}
-              {safeDisplayText(user.lname, "")}
-            </Text>
-            <Text style={[styles.summaryMeta, themed.subtext]}>
-              {safeDisplayText(user.email, "No email")}
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.sectionCard, themed.card]}>
-          <Text style={[styles.sectionTitle, themed.text]}>Identity</Text>
-          <Field label="First Name" value={user.fname} editable={false} theme={theme} />
-          <Field label="Last Name" value={user.lname} editable={false} theme={theme} />
-          <Field label="Email" value={user.email} editable={false} theme={theme} />
-        </View>
-
-        <View style={[styles.sectionCard, themed.card]}>
-          <Text style={[styles.sectionTitle, themed.text]}>Editable details</Text>
-
-          <Text style={[styles.label, themed.text]}>Username</Text>
-          <Text style={[styles.helper, themed.subtext]}>
-            Used as your resident identifier inside Sagip Bayan.
-          </Text>
-          <TextInput
-            style={[styles.input, themed.input]}
-            value={username}
-            onChangeText={(text) => {
-              setUsername(sanitizeUsername(text));
-              if (error) setError("");
-            }}
-            placeholder="Username"
-            placeholderTextColor={theme.subtext}
-            autoCapitalize="none"
-            autoCorrect={false}
-            onFocus={() => scrollToInput("username")}
-            onLayout={registerInput("username")}
-            maxLength={24}
-          />
-
-          <Text style={[styles.label, themed.text]}>Phone Number</Text>
-          <Text style={[styles.helper, themed.subtext]}>
-            Used for urgent messages and account recovery.
-          </Text>
-          <TextInput
-            style={[styles.input, themed.input]}
-            value={phone}
-            onChangeText={(text) => {
-              setPhone(sanitizePhoneLocal(text));
-              if (error) setError("");
-            }}
-            keyboardType="phone-pad"
-            placeholder="Phone Number"
-            placeholderTextColor={theme.subtext}
-            maxLength={10}
-            onFocus={() => scrollToInput("phone")}
-            onLayout={registerInput("phone")}
-          />
-
-          <Text style={[styles.label, themed.text]}>District</Text>
-          <Text style={[styles.helper, themed.subtext]}>
-            Select the district that your address belongs to.
-          </Text>
-          <View style={[styles.input, themed.input]}>
-            <Picker
-              selectedValue={district}
-              onValueChange={onChangeDistrict}
-              style={{ color: district ? theme.text : theme.subtext }}
+        <View ref={contentRef} collapsable={false}>
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => navigation.goBack()}
             >
-              <Picker.Item label="Select district" value="" />
-              {DISTRICT_OPTIONS.map((item) => (
-                <Picker.Item key={item} label={item} value={item} />
-              ))}
-            </Picker>
+              <Ionicons name="chevron-back" size={23} color={theme.text} />
+            </TouchableOpacity>
+
+            <Text style={[styles.headerTitle, themed.text]}>Profile</Text>
+            <View style={styles.headerSpacer} />
           </View>
 
-          <Text style={[styles.label, themed.text]}>Barangay</Text>
-          <Text style={[styles.helper, themed.subtext]}>
-            Select your barangay so alerts can be matched to your area.
-          </Text>
-          <View style={[styles.input, themed.input]}>
-            <Picker
-              selectedValue={barangay}
-              enabled={Boolean(district)}
-              onValueChange={(value) => {
-                setBarangay(value);
-                if (error) setError("");
-              }}
-              style={{
-                color: barangay ? theme.text : theme.subtext,
-                opacity: district ? 1 : 0.6,
-              }}
-            >
-              <Picker.Item
-                label={district ? "Select barangay" : "Select district first"}
-                value=""
-              />
-              {barangayOptions.map((item) => (
-                <Picker.Item key={item} label={item} value={item} />
-              ))}
-            </Picker>
+          <View style={styles.profileHero}>
+            <View style={[styles.avatarRing, { backgroundColor: theme.primarySoft }] }>
+              <Image source={{ uri: avatarSource }} style={styles.avatar} />
+              <View style={[styles.avatarBadge, { backgroundColor: theme.primary, borderColor: theme.background }] }>
+                <Ionicons name="camera" size={15} color={theme.buttonText} />
+              </View>
+            </View>
+            <Text style={[styles.profileName, themed.text]} numberOfLines={1}>
+              {fullName || "User"}
+            </Text>
+            <Text style={[styles.profileEmail, themed.subtext]} numberOfLines={1}>
+              {email}
+            </Text>
           </View>
 
-          <Text style={[styles.label, themed.text]}>Street / Address Details</Text>
-          <Text style={[styles.helper, themed.subtext]}>
-            Enter house number, street, purok, or other address details.
-          </Text>
-          <TextInput
-            style={[styles.input, themed.input]}
-            value={street}
-            onChangeText={(text) => {
-              setStreet(sanitizeStreetDetails(text));
-              if (error) setError("");
-            }}
-            placeholder="House no., street, purok, landmark"
-            placeholderTextColor={theme.subtext}
-            autoCapitalize="words"
-            maxLength={160}
-            onFocus={() => scrollToInput("street")}
-            onLayout={registerInput("street")}
-          />
+          <Text style={[styles.sectionTitle, themed.text]}>Personal Information</Text>
+          <View style={styles.sectionGroup}>
+            <Field icon="person-outline" label="First Name" value={user.fname} theme={theme} />
+            <Field icon="person-outline" label="Last Name" value={user.lname} theme={theme} />
+            <Field icon="mail-outline" label="Email" value={user.email} theme={theme} />
 
-          <View
-            style={{
-              marginTop: 2,
-              marginBottom: 12,
-              padding: 12,
-              borderRadius: 14,
-              backgroundColor: theme.surfaceAlt,
-              borderWidth: 1,
-              borderColor: theme.border,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: "800",
-                color: theme.subtext,
-                marginBottom: 4,
-                textTransform: "uppercase",
-              }}
-            >
-              Full Address Preview
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                lineHeight: 18,
-                color: theme.text,
-                fontWeight: "700",
-              }}
-            >
-              {district || barangay || street
-                ? buildFullAddress({
-                    district: String(district || "").trim(),
-                    barangay: String(barangay || "").trim(),
-                    street: sanitizeStreetDetails(street),
-                  })
-                : "No address set yet"}
-            </Text>
+            <View ref={registerField("username")} collapsable={false} style={[styles.formRow, themed.card]}>
+              <View style={styles.rowIconWrap}>
+                <Ionicons name="at-outline" size={17} color={theme.text} />
+              </View>
+              <View style={styles.formRowBody}>
+                <Text style={[styles.rowLabel, themed.subtext]}>Username</Text>
+                <TextInput
+                  style={[styles.rowInput, themed.text]}
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(sanitizeUsername(text));
+                    if (error) setError("");
+                  }}
+                  placeholder="Username"
+                  placeholderTextColor={theme.subtext}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => scrollToInput("username")}
+                  onLayout={registerInput("username")}
+                  maxLength={24}
+                />
+              </View>
+              <Ionicons name="pencil" size={16} color={theme.text} />
+            </View>
+
+            <View ref={registerField("phone")} collapsable={false} style={[styles.formRow, themed.card]}>
+              <View style={styles.rowIconWrap}>
+                <Ionicons name="call-outline" size={17} color={theme.text} />
+              </View>
+              <View style={styles.formRowBody}>
+                <Text style={[styles.rowLabel, themed.subtext]}>Phone Number</Text>
+                <TextInput
+                  style={[styles.rowInput, themed.text]}
+                  value={phone}
+                  onChangeText={(text) => {
+                    setPhone(sanitizePhoneLocal(text));
+                    if (error) setError("");
+                  }}
+                  keyboardType="phone-pad"
+                  placeholder="Phone Number"
+                  placeholderTextColor={theme.subtext}
+                  maxLength={10}
+                  onFocus={() => scrollToInput("phone")}
+                  onLayout={registerInput("phone")}
+                />
+              </View>
+              <Ionicons name="pencil" size={16} color={theme.text} />
+            </View>
+          </View>
+
+          <Text style={[styles.sectionTitle, themed.text]}>Address</Text>
+          <View style={styles.sectionGroup}>
+            <View ref={registerField("district")} collapsable={false} style={[styles.formRow, themed.card]}>
+              <View style={styles.rowIconWrap}>
+                <Ionicons name="map-outline" size={17} color={theme.text} />
+              </View>
+              <View style={styles.formRowBody}>
+                <Text style={[styles.rowLabel, themed.subtext]}>District</Text>
+                <Picker
+                  selectedValue={district}
+                  onFocus={() => scrollToInput("district")}
+                  onValueChange={(value) => {
+                    scrollToInput("district");
+                    onChangeDistrict(value);
+                  }}
+                  style={[styles.rowPicker, { color: district ? theme.text : theme.subtext }]}
+                >
+                  <Picker.Item label="Select district" value="" />
+                  {DISTRICT_OPTIONS.map((item) => (
+                    <Picker.Item key={item} label={item} value={item} />
+                  ))}
+                </Picker>
+              </View>
+              <Ionicons name="pencil" size={16} color={theme.text} />
+            </View>
+
+            <View ref={registerField("barangay")} collapsable={false} style={[styles.formRow, themed.card]}>
+              <View style={styles.rowIconWrap}>
+                <Ionicons name="location-outline" size={17} color={theme.text} />
+              </View>
+              <View style={styles.formRowBody}>
+                <Text style={[styles.rowLabel, themed.subtext]}>Barangay</Text>
+                <Picker
+                  selectedValue={barangay}
+                  enabled={Boolean(district)}
+                  onFocus={() => scrollToInput("barangay")}
+                  onValueChange={(value) => {
+                    scrollToInput("barangay");
+                    setBarangay(value);
+                    if (error) setError("");
+                  }}
+                  style={[styles.rowPicker, { color: barangay ? theme.text : theme.subtext, opacity: district ? 1 : 0.6 }]}
+                >
+                  <Picker.Item
+                    label={district ? "Select barangay" : "Select district first"}
+                    value=""
+                  />
+                  {barangayOptions.map((item) => (
+                    <Picker.Item key={item} label={item} value={item} />
+                  ))}
+                </Picker>
+              </View>
+              <Ionicons name="pencil" size={16} color={theme.text} />
+            </View>
+
+            <View ref={registerField("street")} collapsable={false} style={[styles.formRow, themed.card]}>
+              <View style={styles.rowIconWrap}>
+                <Ionicons name="home-outline" size={17} color={theme.text} />
+              </View>
+              <View style={styles.formRowBody}>
+                <Text style={[styles.rowLabel, themed.subtext]}>Street / Address Details</Text>
+                <TextInput
+                  style={[styles.rowInput, themed.text]}
+                  value={street}
+                  onChangeText={(text) => {
+                    setStreet(sanitizeStreetDetails(text));
+                    if (error) setError("");
+                  }}
+                  placeholder="House no., street, purok, landmark"
+                  placeholderTextColor={theme.subtext}
+                  autoCapitalize="words"
+                  maxLength={160}
+                  onFocus={() => scrollToInput("street")}
+                  onLayout={registerInput("street")}
+                />
+              </View>
+              <Ionicons name="pencil" size={16} color={theme.text} />
+            </View>
+
+            <View style={[styles.addressPreview, themed.card]}>
+              <Text style={[styles.previewLabel, themed.subtext]}>Full Address Preview</Text>
+              <Text style={[styles.previewText, themed.text]}>
+                {district || barangay || street
+                  ? buildFullAddress({
+                      district: String(district || "").trim(),
+                      barangay: String(barangay || "").trim(),
+                      street: sanitizeStreetDetails(street),
+                    })
+                  : "No address set yet"}
+              </Text>
+            </View>
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -447,7 +450,7 @@ export default function PersonalDetails({ navigation }) {
             onPress={savePersonalDetails}
             disabled={isSaving}
           >
-            <Text style={styles.buttonText}>
+            <Text style={[styles.buttonText, { color: theme.buttonText }]}> 
               {isSaving ? "Saving..." : "Save Changes"}
             </Text>
           </TouchableOpacity>
@@ -457,16 +460,19 @@ export default function PersonalDetails({ navigation }) {
   );
 }
 
-function Field({ label, value, editable, theme }) {
+function Field({ icon, label, value, theme }) {
   return (
-    <View style={[styles.readOnlyField, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
-      <Text style={[styles.readOnlyLabel, { color: theme.subtext }]}>{label}</Text>
-      <Text style={[styles.readOnlyValue, { color: theme.text }]} numberOfLines={1}>
-        {safeDisplayText(value, "Not set")}
-      </Text>
-      {!editable && (
-        <Ionicons name="lock-closed-outline" size={15} color={theme.subtext} />
-      )}
+    <View style={[styles.readOnlyField, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={styles.rowIconWrap}>
+        <Ionicons name={icon} size={17} color={theme.text} />
+      </View>
+      <View style={styles.formRowBody}>
+        <Text style={[styles.readOnlyLabel, { color: theme.subtext }]}>{label}</Text>
+        <Text style={[styles.readOnlyValue, { color: theme.text }]} numberOfLines={1}>
+          {safeDisplayText(value, "Not set")}
+        </Text>
+      </View>
+      <Ionicons name="lock-closed-outline" size={15} color={theme.subtext} />
     </View>
   );
 }

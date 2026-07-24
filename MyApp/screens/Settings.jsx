@@ -149,119 +149,113 @@ export default function Settings({ navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={22} color={theme.primary} />
-        </TouchableOpacity>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Notifications and appearance</Text>
-        </View>
-      </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="shield-checkmark-outline" size={19} color={theme.primary} />
-            <Text style={styles.sectionTitle}>Safety Marking Privacy</Text>
-          </View>
-
-          <SettingSwitchRow
-            theme={theme}
-            styles={styles}
-            icon="location-outline"
-            title="Share my Safety Marking location"
-            helper="When enabled, your profile marker may appear on the Safety Marking map so responders and nearby users can see your safety status. Turn this off if you do not want to share your location."
-            value={shareSafetyLocation}
-            disabled={privacySaving || !user?._id}
-            onValueChange={handleShareSafetyLocationChange}
-            isLast
-          />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerBack} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={21} color={theme.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Settings</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="volume-high-outline" size={19} color={theme.primary} />
-          <Text style={styles.sectionTitle}>Notification sounds</Text>
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={theme.primary} />
-          </View>
-        ) : (
-          <>
+          <Text style={styles.sectionLabel}>SAFETY</Text>
+          <View style={styles.groupCard}>
             <SettingSwitchRow
               theme={theme}
               styles={styles}
-              icon="notifications-outline"
-              title="Normal Notification Sound"
-              helper="Guidelines, announcements, safety marking updates"
-              value={soundSettings.normalNotificationSound}
-              onValueChange={(value) =>
-                setSoundSetting("normalNotificationSound", value)
-              }
-            />
-
-            <SettingSwitchRow
-              theme={theme}
-              styles={styles}
-              icon="chatbubble-ellipses-outline"
-              title="SMS Alert Sound"
-              helper="Alerts that are also delivered by text message"
-              value={soundSettings.smsNotificationSound}
-              onValueChange={(value) =>
-                setSoundSetting("smsNotificationSound", value)
-              }
-            />
-
-            <SettingSwitchRow
-              theme={theme}
-              styles={styles}
-              icon="warning-outline"
-              title="Danger Alert Sound"
-              helper="Nearby incidents, road hazards, emergency alerts"
-              value={soundSettings.dangerNotificationSound}
-              onValueChange={(value) =>
-                setSoundSetting("dangerNotificationSound", value)
-              }
+              icon="location-outline"
+              title="Share Safety Marking location"
+              helper="Show your safety status on the Safety Marking map."
+              value={shareSafetyLocation}
+              disabled={privacySaving || !user?._id}
+              onValueChange={handleShareSafetyLocationChange}
               isLast
             />
-          </>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="contrast-outline" size={19} color={theme.primary} />
-          <Text style={styles.sectionTitle}>Appearance</Text>
+          </View>
         </View>
 
-        <View style={styles.themeOptions}>
-          {THEME_OPTIONS.map((option) => {
-            const active = mode === option.value;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.themeOption, active && styles.themeOptionActive]}
-                onPress={() => setMode(option.value)}
-                activeOpacity={0.86}
-              >
-                <Ionicons
-                  name={option.icon}
-                  size={18}
-                  color={active ? theme.buttonText : theme.primary}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>NOTIFICATIONS</Text>
+          <View style={styles.groupCard}>
+            {loading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={theme.primary} />
+              </View>
+            ) : (
+              <>
+                <SettingSwitchRow
+                  theme={theme}
+                  styles={styles}
+                  icon="notifications-outline"
+                  title="Normal notification sound"
+                  helper="Guidelines, announcements, and safety updates"
+                  value={soundSettings.normalNotificationSound}
+                  onValueChange={(value) =>
+                    setSoundSetting("normalNotificationSound", value)
+                  }
                 />
-                <Text style={[styles.themeOptionText, active && styles.themeOptionTextActive]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+
+                <SettingSwitchRow
+                  theme={theme}
+                  styles={styles}
+                  icon="chatbubble-ellipses-outline"
+                  title="SMS alert sound"
+                  helper="Alerts also delivered by text message"
+                  value={soundSettings.smsNotificationSound}
+                  onValueChange={(value) =>
+                    setSoundSetting("smsNotificationSound", value)
+                  }
+                />
+
+                <SettingSwitchRow
+                  theme={theme}
+                  styles={styles}
+                  icon="warning-outline"
+                  title="Danger alert sound"
+                  helper="Nearby incidents, hazards, and emergency alerts"
+                  value={soundSettings.dangerNotificationSound}
+                  onValueChange={(value) =>
+                    setSoundSetting("dangerNotificationSound", value)
+                  }
+                  isLast
+                />
+              </>
+            )}
+          </View>
         </View>
 
-        <Text style={styles.helperText}>
-          Current display: {resolvedMode === "dark" ? "Dark" : "Light"}
-        </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>APPEARANCE</Text>
+          <View style={styles.groupCard}>
+            <View style={styles.appearanceBlock}>
+              <View style={styles.themeOptions}>
+                {THEME_OPTIONS.map((option) => {
+                  const active = mode === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.themeOption, active && styles.themeOptionActive]}
+                      onPress={() => setMode(option.value)}
+                      activeOpacity={0.86}
+                    >
+                      <Ionicons
+                        name={option.icon}
+                        size={18}
+                        color={active ? theme.buttonText : theme.primary}
+                      />
+                      <Text style={[styles.themeOptionText, active && styles.themeOptionTextActive]}>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.helperText}>
+                Current display: {resolvedMode === "dark" ? "Dark" : "Light"}
+              </Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
 
@@ -339,82 +333,80 @@ function createStyles(theme) {
       backgroundColor: theme.background,
     },
     content: {
-      padding: 18,
-      paddingBottom: 36,
+      paddingTop: 34,
+      paddingHorizontal: 16,
+      paddingBottom: 48,
     },
     header: {
+      height: 42,
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 18,
+      marginBottom: 14,
     },
-    iconButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 14,
-      backgroundColor: theme.surface,
-      borderWidth: 1,
-      borderColor: theme.border,
+    headerBack: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: "center",
       justifyContent: "center",
-      marginRight: 12,
     },
-    headerCopy: {
+    headerTitle: {
       flex: 1,
-    },
-    title: {
+      textAlign: "center",
       color: theme.text,
-      fontSize: 28,
+      fontSize: 17,
       fontWeight: "900",
     },
-    subtitle: {
-      marginTop: 3,
-      color: theme.muted,
-      fontSize: 13,
-      fontWeight: "700",
+    headerSpacer: {
+      width: 36,
+      height: 36,
     },
     section: {
-      backgroundColor: theme.surface,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 18,
-      padding: 14,
-      marginBottom: 16,
+      marginTop: 14,
     },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 12,
-    },
-    sectionTitle: {
-      color: theme.text,
-      fontSize: 16,
+    sectionLabel: {
+      marginBottom: 7,
+      color: theme.subtext,
+      fontSize: 10,
       fontWeight: "900",
     },
+    groupCard: {
+      overflow: "hidden",
+      backgroundColor: theme.card,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: "#10251B",
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: theme.mode === "dark" ? 0 : 0.035,
+      shadowRadius: 12,
+      elevation: theme.mode === "dark" ? 0 : 1,
+    },
     loadingRow: {
-      minHeight: 82,
+      minHeight: 70,
       alignItems: "center",
       justifyContent: "center",
     },
     settingRow: {
-      minHeight: 72,
+      minHeight: 58,
       flexDirection: "row",
       alignItems: "center",
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
-      paddingVertical: 10,
+      paddingHorizontal: 13,
+      paddingVertical: 9,
     },
     settingRowLast: {
       borderBottomWidth: 0,
     },
     settingIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: 14,
+      width: 30,
+      height: 30,
+      borderRadius: 10,
       backgroundColor: theme.primarySoft,
       alignItems: "center",
       justifyContent: "center",
-      marginRight: 12,
+      marginRight: 11,
     },
     settingCopy: {
       flex: 1,
@@ -423,15 +415,18 @@ function createStyles(theme) {
     },
     settingTitle: {
       color: theme.text,
-      fontSize: 14,
-      fontWeight: "900",
+      fontSize: 13,
+      fontWeight: "800",
     },
     settingHelper: {
-      marginTop: 4,
-      color: theme.muted,
-      fontSize: 12,
-      lineHeight: 17,
+      marginTop: 3,
+      color: theme.subtext,
+      fontSize: 11,
+      lineHeight: 15,
       fontWeight: "600",
+    },
+    appearanceBlock: {
+      padding: 13,
     },
     themeOptions: {
       flexDirection: "row",
@@ -439,8 +434,8 @@ function createStyles(theme) {
     },
     themeOption: {
       flex: 1,
-      minHeight: 48,
-      borderRadius: 14,
+      minHeight: 44,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       backgroundColor: theme.surfaceAlt,
@@ -463,14 +458,14 @@ function createStyles(theme) {
       color: theme.buttonText,
     },
     helperText: {
-      marginTop: 12,
-      color: theme.muted,
+      marginTop: 11,
+      color: theme.subtext,
       fontSize: 12,
       fontWeight: "700",
     },
     modalBackdrop: {
       flex: 1,
-      backgroundColor: "rgba(15,23,42,0.52)",
+      backgroundColor: theme.overlay,
       alignItems: "center",
       justifyContent: "center",
       padding: 22,
@@ -479,7 +474,7 @@ function createStyles(theme) {
       width: "100%",
       maxWidth: 420,
       borderRadius: 18,
-      backgroundColor: theme.surface,
+      backgroundColor: theme.modalBackground,
       borderWidth: 1,
       borderColor: theme.border,
       padding: 18,
@@ -500,7 +495,7 @@ function createStyles(theme) {
       marginBottom: 8,
     },
     modalMessage: {
-      color: theme.muted,
+      color: theme.subtext,
       fontSize: 13,
       lineHeight: 19,
       fontWeight: "600",

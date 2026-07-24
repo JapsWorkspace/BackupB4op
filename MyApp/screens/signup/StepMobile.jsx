@@ -32,8 +32,8 @@ export default function StepMobile({
   isSubmitting = false,
 }) {
   const [submitError, setSubmitError] = useState("");
-  const { scrollRef, contentRef, registerInput, registerField, scrollToInput } =
-    useFormAutoScroll(90);
+  const { scrollRef, contentRef, registerInput, registerField, scrollToInput, handleScroll } =
+    useFormAutoScroll(230);
 
   const phoneErrorLocal = useMemo(() => getPhoneError(phone), [phone]);
 
@@ -106,15 +106,19 @@ export default function StepMobile({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <ScrollView
         ref={scrollRef}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           flexGrow: 1,
           padding: 20,
-          paddingBottom: 120,
+          paddingBottom: 260,
         }}
       >
         <View ref={contentRef} collapsable={false} style={styles.container}>

@@ -14,6 +14,7 @@ import {
   FaSun,
   FaMoon,
   FaBullhorn,
+  FaBookOpen,
 } from "react-icons/fa";
 
 import logo from "../../assets/images/sagipbayanlogo.png";
@@ -25,6 +26,7 @@ let sidebarCountMemoryCache = {
   notifications: 0,
   inventory: 0,
   evacuation: 0,
+  guidelines: 0,
 };
 
 const readCachedCounts = () => {
@@ -46,6 +48,7 @@ const readCachedCounts = () => {
       notifications: Number(parsed?.notifications || 0),
       inventory: Number(parsed?.inventory || 0),
       evacuation: Number(parsed?.evacuation || 0),
+      guidelines: Number(parsed?.guidelines || 0),
     };
     sidebarCountMemoryCache = next;
     return next;
@@ -59,6 +62,7 @@ const writeCachedCounts = (counts) => {
     notifications: Number(counts?.notifications || 0),
     inventory: Number(counts?.inventory || 0),
     evacuation: Number(counts?.evacuation || 0),
+    guidelines: Number(counts?.guidelines || 0),
   };
 
   if (typeof window === "undefined") return;
@@ -116,6 +120,9 @@ export default function Sidebar({
   const [evacUnreadCount, setEvacUnreadCount] = useState(
     cachedCountsRef.current.evacuation
   );
+  const [guidelinesUnreadCount, setGuidelinesUnreadCount] = useState(
+    cachedCountsRef.current.guidelines
+  );
   const [badgePulses, setBadgePulses] = useState({});
   const badgeTimersRef = useRef({});
   const previousCountsRef = useRef(cachedCountsRef.current);
@@ -156,13 +163,14 @@ export default function Sidebar({
 
     const fetchUnreadCounts = async () => {
       try {
-        const [allRes, inventoryCount, evacuationCount] = await Promise.all([
+        const [allRes, inventoryCount, evacuationCount, guidelinesCount] = await Promise.all([
           fetch(`${BASE_URL}/api/notifications/unread-count`, {
             method: "GET",
             credentials: "include",
           }),
           getNotificationCount("inventory"),
           getNotificationCount("evacuation"),
+          getNotificationCount("guidelines"),
         ]);
 
         if (allRes.ok) {
@@ -172,6 +180,7 @@ export default function Sidebar({
             const nextUnreadCount = Number(allData.unreadCount || 0);
             const nextInventoryCount = Number(inventoryCount || 0);
             const nextEvacuationCount = Number(evacuationCount || 0);
+            const nextGuidelinesCount = Number(guidelinesCount || 0);
             const previousCounts = previousCountsRef.current;
 
             if (
@@ -192,11 +201,18 @@ export default function Sidebar({
             ) {
               triggerBadgePulse("evacuation");
             }
+            if (
+              hasCompletedInitialFetchRef.current &&
+              nextGuidelinesCount > previousCounts.guidelines
+            ) {
+              triggerBadgePulse("guidelines");
+            }
 
             previousCountsRef.current = {
               notifications: nextUnreadCount,
               inventory: nextInventoryCount,
               evacuation: nextEvacuationCount,
+              guidelines: nextGuidelinesCount,
             };
             writeCachedCounts(previousCountsRef.current);
             hasCompletedInitialFetchRef.current = true;
@@ -204,6 +220,7 @@ export default function Sidebar({
             setUnreadCount(nextUnreadCount);
             setInventoryUnreadCount(nextInventoryCount);
             setEvacUnreadCount(nextEvacuationCount);
+            setGuidelinesUnreadCount(nextGuidelinesCount);
           }
         }
       } catch (err) {
@@ -339,6 +356,14 @@ export default function Sidebar({
                 Icon: FaBullhorn,
                 exact: true,
                 badge: 0,
+              },
+              {
+                to: "/admin/guidelines",
+                label: "Guidelines",
+                Icon: FaBookOpen,
+                exact: true,
+                badge: guidelinesUnreadCount,
+                badgeKey: "guidelines",
               },
               {
                 to: "/admin/time-in-time-out",

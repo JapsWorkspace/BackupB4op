@@ -34,6 +34,32 @@ function getUniSmsSecretKey() {
   ).trim();
 }
 
+function getUniSmsSenderId() {
+  const configured = String(process.env.UNISMS_SENDER_ID || "").trim();
+  return configured || "Unisoft";
+}
+
+function getProviderErrorMessage(data, fallback) {
+  const errors = data?.errors;
+  if (errors && typeof errors === "object") {
+    const detail = Object.entries(errors)
+      .map(([field, messages]) => {
+        const text = Array.isArray(messages) ? messages.join(", ") : String(messages || "");
+        return text ? `${field}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("; ");
+    if (detail) return detail;
+  }
+
+  return (
+    data?.message?.fail_reason ||
+    (typeof data?.message === "string" ? data.message : "") ||
+    data?.error ||
+    fallback
+  );
+}
+
 function maskPhone(value) {
   const text = String(value || "");
   const digits = text.replace(/\D/g, "");
@@ -103,14 +129,14 @@ function normalizePhilippinePhoneNumber(phone) {
 
 async function sendUniSms({ to, message, metadata = {} }) {
   const secretKey = getUniSmsSecretKey();
-  const senderId = String(process.env.UNISMS_SENDER_ID || "").trim();
+  const senderId = getUniSmsSenderId();
   const maxLength = getSmsMaxLength();
 
   logSmsEvent("sms config", {
     provider: "unisms",
     hasToken: Boolean(secretKey),
     apiBaseUrl: getUniSmsApiBaseUrl(),
-    senderId: senderId || "default",
+    senderId,
     phoneFormat: "e164",
     maxLength: String(maxLength),
   });
@@ -139,7 +165,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
   const body = {
     recipient: normalizedTo,
     content: finalMessage,
-    ...(senderId ? { sender_id: senderId } : {}),
+    sender_id: senderId,
     ...(metadata && Object.keys(metadata).length ? { metadata } : {}),
   };
 
@@ -148,7 +174,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
       provider: "unisms",
       normalizedPhone: normalizedTo,
       providerPhone: normalizedTo,
-      senderId: senderId || "default",
+      senderId,
       length: finalMessage.length,
     });
 
@@ -174,11 +200,10 @@ async function sendUniSms({ to, message, metadata = {} }) {
     const failed = messageStatus === "failed" || Boolean(data?.message?.fail_reason);
 
     if (!response.ok || failed) {
-      const errorMessage =
-        data?.message?.fail_reason ||
-        data?.message ||
-        data?.error ||
-        `UniSMS request failed (${response.status})`;
+      const errorMessage = getProviderErrorMessage(
+        data,
+        `UniSMS request failed (${response.status})`
+      );
       logSmsEvent("sms failed", {
         provider: "unisms",
         status: response.status,
