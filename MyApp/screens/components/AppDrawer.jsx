@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { UserContext } from "../UserContext";
 import { useTheme } from "../contexts/ThemeContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getApiBaseUrl, PROD_BASE } from "../../lib/api";
 
 const DEFAULT_AVATAR =
@@ -94,6 +95,7 @@ export default function AppDrawer({
 }) {
   const { user } = useContext(UserContext);
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const themed = useMemo(() => createThemedDrawerStyles(theme), [theme]);
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const [assetBaseUrl, setAssetBaseUrl] = useState(PROD_BASE);
@@ -156,7 +158,13 @@ export default function AppDrawer({
 
   return (
     <View style={styles.overlay}>
-      <Animated.View style={[styles.drawer, themed.drawer, { transform: [{ translateX }] }]}>
+      <Animated.View
+        style={[
+          styles.drawer,
+          themed.drawer,
+          { paddingTop: Math.max(insets.top + 14, 42), transform: [{ translateX }] },
+        ]}
+      >
         <View style={styles.headerRow}>
           <View style={styles.headerBrand}>
             <View style={[styles.headerBadge, themed.softIcon]}>
@@ -309,7 +317,7 @@ const styles = StyleSheet.create({
   drawer: {
     width: DRAWER_WIDTH,
     backgroundColor: "#F6F7F2",
-    paddingTop: 18,
+    paddingTop: 42,
     borderTopRightRadius: 28,
     borderBottomRightRadius: 28,
     shadowColor: "#000000",

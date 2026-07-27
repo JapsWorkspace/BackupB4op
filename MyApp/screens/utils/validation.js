@@ -124,9 +124,11 @@ export function normalizeEmail(value) {
 }
 
 export function sanitizeSearchText(value) {
-  return sanitizeTextInput(value, {
-    maxLength: SEARCH_MAX_LENGTH,
-  });
+  return asString(value)
+    .replace(INVISIBLE_WHITESPACE_REGEX, "")
+    .replace(SUSPICIOUS_TEXT_REGEX, "")
+    .replace(MULTI_WHITESPACE_REGEX, " ")
+    .slice(0, SEARCH_MAX_LENGTH);
 }
 
 export function sanitizeConnectionCode(value) {

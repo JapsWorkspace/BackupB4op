@@ -20,7 +20,9 @@ import {
   MAX_CONTENT_DESCRIPTION_LENGTH,
   MAX_CONTENT_TITLE_LENGTH,
   sanitizeContentDescription,
+  sanitizeContentDescriptionInput,
   sanitizeContentTitle,
+  sanitizeContentTitleInput,
   validateContentFields
 } from "../contentTextUtils";
 
@@ -390,6 +392,8 @@ export default function HomeGuidelines() {
       formData.append("category", category);
       formData.append("status", status);
       formData.append("priorityLevel", priorityLevel);
+      formData.append("sendSms", "true");
+      formData.append("sendEmail", "true");
 
       files.forEach((file) => {
         formData.append("attachments", file);
@@ -821,7 +825,7 @@ export default function HomeGuidelines() {
                       className="gl-input"
                       placeholder="Enter guideline title"
                       value={title}
-                      onChange={(e) => setTitle(sanitizeContentTitle(e.target.value))}
+                      onChange={(e) => setTitle(sanitizeContentTitleInput(e.target.value))}
                       maxLength={MAX_CONTENT_TITLE_LENGTH}
                     />
                   </div>
@@ -833,7 +837,7 @@ export default function HomeGuidelines() {
                       placeholder="Write guideline details"
                       value={description}
                       onChange={(e) =>
-                        setDescription(sanitizeContentDescription(e.target.value))
+                        setDescription(sanitizeContentDescriptionInput(e.target.value))
                       }
                       maxLength={MAX_CONTENT_DESCRIPTION_LENGTH}
                     />
@@ -1178,7 +1182,7 @@ export default function HomeGuidelines() {
                         className="gl-input"
                         value={editTitle}
                         onChange={(e) =>
-                          setEditTitle(sanitizeContentTitle(e.target.value))
+                          setEditTitle(sanitizeContentTitleInput(e.target.value))
                         }
                         placeholder="Guideline title"
                         maxLength={MAX_CONTENT_TITLE_LENGTH}
@@ -1191,7 +1195,7 @@ export default function HomeGuidelines() {
                         className="gl-modal-textarea"
                         value={editDescription}
                         onChange={(e) =>
-                          setEditDescription(sanitizeContentDescription(e.target.value))
+                          setEditDescription(sanitizeContentDescriptionInput(e.target.value))
                         }
                         placeholder="Guideline description"
                         maxLength={MAX_CONTENT_DESCRIPTION_LENGTH}

@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Image,
   Modal,
@@ -13,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../lib/api";
 import { UserContext } from "./UserContext";
 import { NotificationContext } from "./contexts/NotificationContext";
@@ -20,6 +22,7 @@ import { useTheme } from "./contexts/ThemeContext";
 import { safeDisplayText, sanitizeSearchText } from "./utils/validation";
 
 const CATEGORIES = ["all", "general", "advisory", "event", "service", "weather", "emergency"];
+const SAVED_ANNOUNCEMENTS_KEY = "sagipbayan.savedAnnouncements";
 
 export default function AnnouncementScreen({ navigation, route }) {
   const { user } = useContext(UserContext) || {};
@@ -33,11 +36,27 @@ export default function AnnouncementScreen({ navigation, route }) {
   const [searchText, setSearchText] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const [savedAnnouncementIds, setSavedAnnouncementIds] = useState([]);
   const openedRouteAnnouncementIdRef = useRef(null);
 
   useEffect(() => {
     fetchAnnouncements();
   }, [selectedCategory, user?._id]);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(SAVED_ANNOUNCEMENTS_KEY)
+      .then((raw) => {
+        if (!active) return;
+        const saved = raw ? JSON.parse(raw) : [];
+        setSavedAnnouncementIds(Array.isArray(saved) ? saved.map(String) : []);
+      })
+      .catch((error) => console.log("[announcements] saved load failed:", error?.message));
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     handleSearch(searchText);
@@ -130,7 +149,9 @@ export default function AnnouncementScreen({ navigation, route }) {
       setAnnouncements(visibleItems);
       setFilteredAnnouncements(visibleItems);
       console.log("[announcements] fetched published count", visibleItems.length);
-      await refreshNotifications?.();
+      refreshNotifications?.().catch((notifyError) => {
+        console.log("[notifications] refresh after feed fetch failed:", notifyError?.message);
+      });
     } catch (error) {
       console.log("Error fetching announcements:", {
         message: error?.message,
@@ -146,13 +167,15 @@ export default function AnnouncementScreen({ navigation, route }) {
     const cleanText = sanitizeSearchText(text);
     setSearchText(cleanText);
 
-    if (!cleanText) {
+    const queryText = cleanText.trim();
+
+    if (!queryText) {
       setFilteredAnnouncements(announcements);
       setSuggestions([]);
       return;
     }
 
-    const query = cleanText.toLowerCase();
+    const query = queryText.toLowerCase();
     const filtered = announcements.filter((item) => {
       const title = safeDisplayText(item?.title, "").toLowerCase();
       const description = safeDisplayText(item?.description, "").toLowerCase();
@@ -168,14 +191,15 @@ export default function AnnouncementScreen({ navigation, route }) {
   };
 
   const updateAnnouncementInState = (nextItem) => {
+    const nextId = getItemId(nextItem);
     setAnnouncements((prev) =>
-      prev.map((item) => (item._id === nextItem._id ? { ...item, ...nextItem } : item))
+      prev.map((item) => (getItemId(item) === nextId ? { ...item, ...nextItem } : item))
     );
     setFilteredAnnouncements((prev) =>
-      prev.map((item) => (item._id === nextItem._id ? { ...item, ...nextItem } : item))
+      prev.map((item) => (getItemId(item) === nextId ? { ...item, ...nextItem } : item))
     );
     setSelectedAnnouncement((current) =>
-      current?._id === nextItem._id ? { ...current, ...nextItem } : current
+      getItemId(current) === nextId ? { ...current, ...nextItem } : current
     );
   };
 
@@ -196,75 +220,105 @@ export default function AnnouncementScreen({ navigation, route }) {
   const toggleAnnouncementLike = async (item) => {
     if (!user?._id || !item?._id) return;
 
+    const wasLiked = Boolean(item.likedByCurrentUser);
+    const nextLiked = !wasLiked;
+    const currentLikes = Number(item?.likeCount ?? 0);
+    const optimisticLikeCount = Math.max(0, currentLikes + (nextLiked ? 1 : -1));
+    const optimisticItem = {
+      ...item,
+      likedByCurrentUser: nextLiked,
+      likeCount: optimisticLikeCount,
+    };
+
+    updateAnnouncementInState(optimisticItem);
+
     try {
       const response = await api.post(`/api/announcements/${item._id}/like`, {
         userId: user._id,
       });
-      updateAnnouncementInState(response.data);
+      updateAnnouncementInState({
+        ...response.data,
+        _id: item._id,
+        likedByCurrentUser: nextLiked,
+        likeCount: Number(response.data?.likeCount ?? optimisticLikeCount),
+      });
     } catch (error) {
+      updateAnnouncementInState(item);
       console.log("Error toggling announcement like:", error?.message);
     }
+  };
+
+  const toggleSavedAnnouncement = async (item) => {
+    const itemId = getItemId(item);
+    if (!itemId) return;
+
+    setSavedAnnouncementIds((current) => {
+      const exists = current.includes(itemId);
+      const next = exists ? current.filter((id) => id !== itemId) : [...current, itemId];
+      AsyncStorage.setItem(SAVED_ANNOUNCEMENTS_KEY, JSON.stringify(next)).catch((error) =>
+        console.log("[announcements] saved write failed:", error?.message)
+      );
+      return next;
+    });
   };
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.card}
       onPress={() => openAnnouncement(item)}
-      activeOpacity={0.9}
+      activeOpacity={0.92}
     >
-      {getPrimaryImage(item) && (
+      <PostHeader item={item} styles={styles} theme={theme} />
+
+      {getPrimaryImage(item) ? (
         <ResponsiveAttachmentImage
           uri={getPrimaryImage(item).fileUrl}
           frameStyle={styles.cardImageFrame}
           style={styles.postImage}
-          maxHeight={230}
-          minHeight={170}
+          maxHeight={360}
+          minHeight={240}
           onPress={() => openAnnouncement(item)}
         />
-      )}
-      <View style={styles.postBody}>
-        <Text style={styles.postTitle} numberOfLines={2}>
-          {safeDisplayText(item?.title, "Untitled announcement")}
-        </Text>
-
-        {!!item.description && (
-          <Text style={styles.postDescription} numberOfLines={3}>
-            {safeDisplayText(item?.description, "")}
+      ) : (
+        <View style={styles.textOnlyMedia}>
+          <Ionicons name="megaphone-outline" size={32} color={theme.primary} />
+          <Text style={styles.textOnlyMediaTitle} numberOfLines={3}>
+            {safeDisplayText(item?.title, "Untitled announcement")}
           </Text>
-        )}
+        </View>
+      )}
 
-        <View style={styles.engagementLine}>
-          <EngagementRow item={item} styles={styles} theme={theme} />
-          <TouchableOpacity
-            style={[
-              styles.likeButton,
-              item.likedByCurrentUser && styles.likeButtonActive,
-              !user?._id && styles.likeButtonDisabled,
-            ]}
+      <View style={styles.actionBar}>
+        <View style={styles.actionCluster}>
+          <AnimatedHeartButton
+            liked={item.likedByCurrentUser}
             disabled={!user?._id}
             onPress={() => toggleAnnouncementLike(item)}
-          >
-            <Ionicons
-              name={item.likedByCurrentUser ? "heart" : "heart-outline"}
-              size={17}
-              color={item.likedByCurrentUser ? theme.buttonText : theme.primary}
-            />
-            <Text
-              style={[
-                styles.likeButtonText,
-                item.likedByCurrentUser && styles.likeButtonTextActive,
-              ]}
-            >
-              {item.likedByCurrentUser ? "Liked" : "Like"}
-            </Text>
-          </TouchableOpacity>
+            color={theme.text}
+            actionStyle={styles.iconAction}
+          />
         </View>
+        <TouchableOpacity style={styles.iconAction} onPress={(event) => { event?.stopPropagation?.(); toggleSavedAnnouncement(item); }} activeOpacity={0.75}>
+          <Ionicons
+            name={savedAnnouncementIds.includes(getItemId(item)) ? "bookmark" : "bookmark-outline"}
+            size={27}
+            color={savedAnnouncementIds.includes(getItemId(item)) ? theme.primary : theme.text}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.postBody}>
+        <EngagementRow item={item} styles={styles} theme={theme} />
+
+        <Text style={styles.postCaption} numberOfLines={3}>
+          <Text style={styles.captionAuthor}>MDRRMO </Text>
+          {safeDisplayText(item?.title, "Untitled announcement")}
+          {!!item.description ? ` ${safeDisplayText(item?.description, "")}` : ""}
+        </Text>
 
         <View style={styles.postFooterRow}>
-          <Text style={styles.readMoreText}>Read More</Text>
-          <View style={styles.metaRow}>
-            <MetaPill text={item.category || "general"} styles={styles} />
-          </View>
+          <Text style={styles.postTimeText}>{formatDate(item?.createdAt)}</Text>
+          <MetaPill text={item.category || "general"} styles={styles} />
         </View>
       </View>
     </TouchableOpacity>
@@ -473,6 +527,40 @@ function AnnouncementModal({ item, userId, styles, theme, onToggleLike, onClose 
   );
 }
 
+function AnimatedHeartButton({ liked, disabled, onPress, color, actionStyle }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  const handlePress = (event) => {
+    event?.stopPropagation?.();
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.28, duration: 90, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, friction: 3, tension: 180, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(rotate, { toValue: 1, duration: 55, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: -1, duration: 70, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: 0, duration: 65, useNativeDriver: true }),
+      ]),
+    ]).start();
+    onPress?.();
+  };
+
+  const spin = rotate.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ["-9deg", "0deg", "9deg"],
+  });
+
+  return (
+    <TouchableOpacity style={actionStyle} disabled={disabled} onPress={handlePress} activeOpacity={0.75}>
+      <Animated.View style={{ transform: [{ scale }, { rotate: spin }] }}>
+        <Ionicons name={liked ? "heart" : "heart-outline"} size={29} color={liked ? "#E11D48" : color} />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
 function EngagementRow({ item, styles, theme }) {
   const views = Number(item?.viewCount ?? item?.views ?? 0);
   const likes = Number(item?.likeCount ?? 0);
@@ -634,6 +722,10 @@ function ZoomableImageViewer({ image, title, styles, onClose }) {
   );
 }
 
+function getItemId(item) {
+  return String(item?._id || item?.id || "");
+}
+
 function getPrimaryImage(item) {
   return (item?.attachments || []).find((file) =>
     /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(file?.fileUrl || "")
@@ -658,7 +750,7 @@ function makeStyles(theme) {
     container: {
       flex: 1,
       backgroundColor: theme.background,
-      paddingHorizontal: 18,
+      paddingHorizontal: 0,
       paddingTop: 28,
     },
     loading: {
@@ -671,7 +763,8 @@ function makeStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      marginBottom: 18,
+      marginBottom: 14,
+      paddingHorizontal: 18,
     },
     backButton: {
       width: 42,
@@ -752,7 +845,7 @@ function makeStyles(theme) {
     },
     searchWrap: {
       minHeight: 48,
-      borderRadius: 8,
+      borderRadius: 18,
       backgroundColor: theme.card,
       borderWidth: 1,
       borderColor: theme.border,
@@ -760,6 +853,7 @@ function makeStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       gap: 9,
+      marginHorizontal: 18,
       marginBottom: 10,
     },
     searchInput: {
@@ -773,6 +867,7 @@ function makeStyles(theme) {
       backgroundColor: theme.card,
       borderWidth: 1,
       borderColor: theme.border,
+      marginHorizontal: 18,
       marginBottom: 10,
       overflow: "hidden",
     },
@@ -793,6 +888,7 @@ function makeStyles(theme) {
       gap: 8,
       marginBottom: 14,
       flexWrap: "wrap",
+      paddingHorizontal: 18,
     },
     chip: {
       minHeight: 34,
@@ -818,35 +914,33 @@ function makeStyles(theme) {
       color: theme.buttonText,
     },
     listContent: {
-      paddingBottom: 28,
-      gap: 14,
+      paddingBottom: 34,
+      gap: 12,
     },
     card: {
-      borderRadius: 8,
       backgroundColor: theme.card,
-      borderWidth: 1,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
       borderColor: theme.border,
       padding: 0,
       overflow: "hidden",
-      shadowColor: "#0F2319",
-      shadowOpacity: isDark ? 0.22 : 0.08,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 3,
     },
     postHeader: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      marginBottom: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
     publisherAvatar: {
       width: 42,
       height: 42,
-      borderRadius: 15,
+      borderRadius: 21,
       backgroundColor: theme.primarySoft,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     publisherCopy: {
       flex: 1,
@@ -863,10 +957,10 @@ function makeStyles(theme) {
       fontWeight: "700",
     },
     officialBadge: {
-      minHeight: 28,
-      paddingHorizontal: 9,
-      borderRadius: 999,
-      backgroundColor: theme.primarySoft,
+      minHeight: 30,
+      paddingHorizontal: 10,
+      borderRadius: 10,
+      backgroundColor: theme.surfaceAlt,
       flexDirection: "row",
       alignItems: "center",
       gap: 4,
@@ -877,8 +971,9 @@ function makeStyles(theme) {
       fontWeight: "900",
     },
     postBody: {
-      padding: 16,
-      gap: 10,
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+      gap: 8,
     },
     postTitle: {
       color: theme.text,
@@ -892,12 +987,30 @@ function makeStyles(theme) {
       lineHeight: 20,
       fontWeight: "600",
     },
+    postCaption: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+    captionAuthor: {
+      color: theme.text,
+      fontWeight: "900",
+    },
+    postTimeText: {
+      color: theme.mutedText,
+      fontSize: 11,
+      fontWeight: "700",
+    },
     cardImageFrame: {
       width: "100%",
       overflow: "hidden",
-      backgroundColor: theme.surfaceAlt,
+      backgroundColor: isDark ? "#050807" : "#EDF4EE",
       alignItems: "center",
       justifyContent: "center",
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: theme.border,
     },
     imageFrame: {
       width: "100%",
@@ -928,6 +1041,42 @@ function makeStyles(theme) {
       borderRadius: 8,
       backgroundColor: theme.surfaceAlt,
     },
+    actionBar: {
+      minHeight: 48,
+      paddingHorizontal: 11,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    actionCluster: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
+    },
+    iconAction: {
+      width: 40,
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    textOnlyMedia: {
+      minHeight: 230,
+      paddingHorizontal: 28,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDark ? "#102018" : "#E8F3EA",
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: theme.border,
+      gap: 12,
+    },
+    textOnlyMediaTitle: {
+      color: theme.text,
+      fontSize: 22,
+      lineHeight: 29,
+      fontWeight: "900",
+      textAlign: "center",
+    },
     engagementLine: {
       flexDirection: "row",
       alignItems: "center",
@@ -942,20 +1091,19 @@ function makeStyles(theme) {
       flex: 1,
     },
     engagementPill: {
-      minHeight: 28,
-      paddingHorizontal: 9,
-      borderRadius: 999,
-      backgroundColor: theme.surfaceAlt,
-      borderWidth: 1,
-      borderColor: theme.border,
+      minHeight: 22,
+      paddingHorizontal: 0,
+      borderRadius: 0,
+      backgroundColor: "transparent",
+      borderWidth: 0,
       flexDirection: "row",
       alignItems: "center",
       gap: 5,
     },
     engagementText: {
-      color: theme.mutedText,
-      fontSize: 11,
-      fontWeight: "800",
+      color: theme.text,
+      fontSize: 12,
+      fontWeight: "900",
     },
     likeButton: {
       minHeight: 36,

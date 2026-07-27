@@ -7,6 +7,8 @@ const { uploadGuideline } = require("../middleware/upload");
 router.get("/published", controller.getPublishedGuidelines);
 router.get("/published/export-pdf", controller.exportPublishedGuidelinesPdf);
 router.patch("/view/:id", controller.incrementViews);
+router.post("/:id/view", controller.incrementViews);
+router.post("/:id/like", controller.toggleLike);
 router.patch("/soft-delete/:id", controller.archiveGuideline);
 router.patch("/restore/:id", controller.restoreGuideline);
 

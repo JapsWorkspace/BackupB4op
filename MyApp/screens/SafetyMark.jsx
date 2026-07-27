@@ -96,6 +96,18 @@ const getDebugMarkerPayload = (data) => {
 const hasCoords = (location) =>
   typeof location?.lat === "number" && typeof location?.lng === "number";
 
+const isLikelyNetworkError = (err) => {
+  const message = String(err?.message || "").toLowerCase();
+  return (
+    !err?.response ||
+    message.includes("network") ||
+    message.includes("timeout") ||
+    message.includes("fetch failed") ||
+    message.includes("internet") ||
+    message.includes("offline")
+  );
+};
+
 function getBarangayColorParts(index = 0) {
   const hue = Math.round((index * 137.508 + 24) % 360);
   const saturationCycle = [78, 64, 86, 58];
@@ -681,6 +693,7 @@ export default function SafetyMark() {
   const [debugMarkers, setDebugMarkers] = useState([]);
   const [debugSyncing, setDebugSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [mongoBarangays, setMongoBarangays] = useState(null);
   const [liveGpsLocation, setLiveGpsLocation] = useState(null);
   const [, setAssetBaseVersion] = useState(0);
@@ -740,9 +753,11 @@ export default function SafetyMark() {
           features,
         });
 
+        setIsOffline(false);
         console.log("[SafetyMark] barangay boundaries fetched:", features.length);
       })
       .catch((err) => {
+        if (isLikelyNetworkError(err)) setIsOffline(true);
         console.log("[SafetyMark] barangay boundary fetch failed:", err?.message);
       });
 
@@ -873,10 +888,12 @@ export default function SafetyMark() {
           safetyStatus: marker.safetyStatus,
         }))
       );
+      setIsOffline(false);
       setDebugMarkers(nextMarkers);
       console.log("[markers] refetched:", nextMarkers.length);
       return nextMarkers;
     } catch (err) {
+      if (isLikelyNetworkError(err)) setIsOffline(true);
       console.log("[SafetyMark] debug marker fetch failed:", err?.message);
       return [];
     }
@@ -921,6 +938,7 @@ export default function SafetyMark() {
     try {
       await Promise.all([fetchConnections(), fetchDebugMarkers()]);
     } catch (err) {
+      if (isLikelyNetworkError(err)) setIsOffline(true);
       console.log("[SafetyMark] refresh failed:", err?.message);
     } finally {
       setLoading(false);
@@ -1677,7 +1695,14 @@ export default function SafetyMark() {
         )}
       </MapView>
 
-      <View style={styles.mapLegend}>
+      {isOffline && (
+        <View style={styles.offlineBanner} pointerEvents="none">
+          <Ionicons name="cloud-offline-outline" size={16} color="#FFFFFF" />
+          <Text style={styles.offlineBannerText}>No internet connection</Text>
+        </View>
+      )}
+
+      <View style={[styles.mapLegend, isOffline && styles.mapLegendOffline]}>
         <View style={styles.legendBadge}>
           <Text style={styles.legendBadgeText}>Jaen Safety Map</Text>
         </View>
@@ -2175,6 +2200,28 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
 
+  offlineBanner: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 126 : 104,
+    left: 16,
+    right: 16,
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(15, 23, 42, 0.82)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    zIndex: 14,
+    elevation: 14,
+  },
+
+  offlineBannerText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
   mapLegend: {
     position: "absolute",
     top: Platform.OS === "ios" ? 126 : 96,
@@ -2182,6 +2229,10 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 10,
     pointerEvents: "none",
+  },
+
+  mapLegendOffline: {
+    top: Platform.OS === "ios" ? 168 : 146,
   },
 
   legendBadge: {

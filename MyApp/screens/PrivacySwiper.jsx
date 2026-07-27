@@ -41,7 +41,7 @@ export default function PrivacySwiper({ navigation }) {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.78}>
           <Ionicons name="chevron-back" size={22} color="#1F5F3B" />
         </TouchableOpacity>
 
@@ -110,6 +110,11 @@ const styles = StyleSheet.create({
     borderColor: "#DCE9D6",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#123524",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   title: {
     flex: 1,

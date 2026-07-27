@@ -157,8 +157,8 @@ function getGuidelineDispatchOptions(guideline, payload = {}) {
 
   return {
     urgent,
-    sendSms: urgent && (payload.sendSms === undefined ? true : parseBoolean(payload.sendSms)),
-    sendEmail: urgent || parseBoolean(payload.sendEmail),
+    sendSms: payload.sendSms === undefined ? true : parseBoolean(payload.sendSms),
+    sendEmail: payload.sendEmail === undefined ? true : parseBoolean(payload.sendEmail),
   };
 }
 
@@ -1323,20 +1323,7 @@ const toggleLike = async (req, res) => {
     }
 
     await guideline.save();
-    res.json(toClientGuideline(guideline, userId));
-     if (guideline.attachments?.length) {
-      await Promise.all(
-        guideline.attachments
-          .filter((file) => file?.public_id)
-          .map((file) => cloudinary.uploader.destroy(file.public_id))
-      );
-    }
-
-    await notifyGuidelineDeleted(req, guideline);
-
-    await PostingGuideline.findByIdAndDelete(req.params.id);
-
-    return res.status(200).json({ message: "Guideline deleted successfully" });
+    return res.json(toClientGuideline(guideline, userId));
   } catch (err) {
     console.error("Error toggling guideline like:", err);
     res.status(500).json({ error: err.message });

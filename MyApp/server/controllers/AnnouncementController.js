@@ -219,7 +219,7 @@ function getAnnouncementDispatchOptions(announcement, payload = {}) {
   return {
     urgent,
     sendSms: payload.sendSms === undefined ? true : parseBoolean(payload.sendSms),
-    sendEmail: urgent || parseBoolean(payload.sendEmail),
+    sendEmail: payload.sendEmail === undefined ? true : parseBoolean(payload.sendEmail),
   };
 }
 

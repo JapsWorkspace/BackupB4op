@@ -1,8 +1,9 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Easing,
+  Dimensions,
   KeyboardAvoidingView,
   ImageBackground,
   Platform,
@@ -18,11 +19,16 @@ import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 
 import api from "../lib/api";
-import styles, { COLORS } from "../Designs/LogIn";
+import { COLORS, createLoginStyles } from "../Designs/LogIn";
 import { UserContext } from "./UserContext";
 import { sanitizeUsername } from "./utils/validation";
 
 export default function LogIn({ navigation }) {
+  const initialMetrics = useRef(Dimensions.get("window")).current;
+  const styles = useMemo(
+    () => createLoginStyles(initialMetrics.width, initialMetrics.height),
+    [initialMetrics.height, initialMetrics.width]
+  );
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -175,7 +181,7 @@ export default function LogIn({ navigation }) {
       <StatusBar style="light" />
       <KeyboardAvoidingView
         style={styles.keyboard}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
       >
         <ScrollView

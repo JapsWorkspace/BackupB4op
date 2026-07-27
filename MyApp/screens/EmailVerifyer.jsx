@@ -131,8 +131,8 @@ export default function EmailVerifyer({ navigation }) {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.container}
         >
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>Back</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.78}>
+            <Ionicons name="chevron-back" size={22} color="#1F5F3B" />
           </TouchableOpacity>
 
           <View style={styles.card}>
@@ -255,17 +255,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 18,
     left: 20,
-    minHeight: 40,
+    width: 40,
+    height: 40,
     borderRadius: 14,
-    paddingHorizontal: 14,
-    justifyContent: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E1EAE4",
-  },
-  backText: {
-    color: "#14532D",
-    fontWeight: "900",
+    borderColor: "#DCE9D6",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#123524",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   card: {
     borderRadius: 24,

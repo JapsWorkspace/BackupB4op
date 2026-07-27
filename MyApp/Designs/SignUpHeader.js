@@ -1,4 +1,4 @@
-import { StyleSheet, Platform, StatusBar } from "react-native";
+import { StyleSheet, StatusBar } from "react-native";
 
 export default StyleSheet.create({
   container: {
@@ -12,18 +12,36 @@ export default StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 16,
-    marginTop: -30, // ✅ moved slightly lower for better reach
+    marginTop: -30,
   },
 
-  backText: {
-    fontSize: 26,
-    color: "#166534",
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DCE9D6",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#123524",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
 
   headerTitle: {
+    flex: 1,
+    textAlign: "center",
     fontSize: 18,
-    fontWeight: "700",
-    color: "#166534",
+    fontWeight: "900",
+    color: "#10251B",
+  },
+
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
 
   progressRow: {

@@ -49,6 +49,23 @@ export const sanitizeContentDescription = (value) =>
       .replace(/\n{2,}/g, "\n")
       .replace(/[ ]{2,}/g, " ")
   ).slice(0, MAX_CONTENT_DESCRIPTION_LENGTH);
+export const sanitizeContentTitleInput = (value) =>
+  stripUnsupportedCharacters(
+    String(value || "")
+      .normalize("NFKC")
+      .replace(/\r|\n/g, " ")
+      .replace(/[ \t\f\v]{2,}/g, " ")
+  ).slice(0, MAX_CONTENT_TITLE_LENGTH);
+
+export const sanitizeContentDescriptionInput = (value) =>
+  stripUnsupportedCharacters(
+    String(value || "")
+      .normalize("NFKC")
+      .replace(/\r/g, "")
+      .replace(/[ \t\f\v]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n"),
+    { allowLineBreaks: true }
+  ).slice(0, MAX_CONTENT_DESCRIPTION_LENGTH);
 
 export const validateContentFields = (title, description) => {
   const cleanTitle = sanitizeContentTitle(title);

@@ -22,7 +22,9 @@ import {
   MAX_CONTENT_DESCRIPTION_LENGTH,
   MAX_CONTENT_TITLE_LENGTH,
   sanitizeContentDescription,
+  sanitizeContentDescriptionInput,
   sanitizeContentTitle,
+  sanitizeContentTitleInput,
   validateContentFields,
 } from "./contentTextUtils";
 
@@ -448,6 +450,8 @@ export default function Announcement() {
       formData.append("category", category);
       formData.append("status", status);
       formData.append("priorityLevel", priorityLevel);
+      formData.append("sendSms", "true");
+      formData.append("sendEmail", "true");
       files.forEach((file) => formData.append("attachments", file));
 
       const response = await fetch(ANNOUNCEMENTS_URL, {
@@ -817,7 +821,7 @@ export default function Announcement() {
                     <input
                       className="gl-input"
                       value={title}
-                      onChange={(e) => setTitle(sanitizeContentTitle(e.target.value))}
+                      onChange={(e) => setTitle(sanitizeContentTitleInput(e.target.value))}
                       placeholder="Enter announcement title"
                       maxLength={MAX_CONTENT_TITLE_LENGTH}
                     />
@@ -829,7 +833,7 @@ export default function Announcement() {
                       className="gl-textarea"
                       value={description}
                       onChange={(e) =>
-                        setDescription(sanitizeContentDescription(e.target.value))
+                        setDescription(sanitizeContentDescriptionInput(e.target.value))
                       }
                       placeholder="Write announcement details"
                       maxLength={MAX_CONTENT_DESCRIPTION_LENGTH}
@@ -1204,7 +1208,7 @@ export default function Announcement() {
                         className="gl-input"
                         value={editTitle}
                         onChange={(e) =>
-                          setEditTitle(sanitizeContentTitle(e.target.value))
+                          setEditTitle(sanitizeContentTitleInput(e.target.value))
                         }
                         placeholder="Announcement title"
                         maxLength={MAX_CONTENT_TITLE_LENGTH}
@@ -1217,7 +1221,7 @@ export default function Announcement() {
                         className="gl-modal-textarea"
                         value={editDescription}
                         onChange={(e) =>
-                          setEditDescription(sanitizeContentDescription(e.target.value))
+                          setEditDescription(sanitizeContentDescriptionInput(e.target.value))
                         }
                         placeholder="Announcement description"
                         maxLength={MAX_CONTENT_DESCRIPTION_LENGTH}

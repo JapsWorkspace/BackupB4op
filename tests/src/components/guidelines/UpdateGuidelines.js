@@ -4,7 +4,9 @@ import {
   MAX_CONTENT_DESCRIPTION_LENGTH,
   MAX_CONTENT_TITLE_LENGTH,
   sanitizeContentDescription,
+  sanitizeContentDescriptionInput,
   sanitizeContentTitle,
+  sanitizeContentTitleInput,
   validateContentFields
 } from "../contentTextUtils";
 
@@ -52,14 +54,14 @@ return ( <div style={styles.overlay}> <div style={styles.modal}> <h2>Update Guid
     <input
       style={styles.input}
       value={title}
-      onChange={(e) => setTitle(sanitizeContentTitle(e.target.value))}
+      onChange={(e) => setTitle(sanitizeContentTitleInput(e.target.value))}
       maxLength={MAX_CONTENT_TITLE_LENGTH}
     />
 
     <textarea
       style={styles.input}
       value={description}
-      onChange={(e) => setDescription(sanitizeContentDescription(e.target.value))}
+      onChange={(e) => setDescription(sanitizeContentDescriptionInput(e.target.value))}
       maxLength={MAX_CONTENT_DESCRIPTION_LENGTH}
     />
 

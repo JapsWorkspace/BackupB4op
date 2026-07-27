@@ -1,9 +1,6 @@
 import { Dimensions, StyleSheet } from "react-native";
 
-const { width, height } = Dimensions.get("window");
-const compactHeight = height < 720;
-const heroHeight = Math.min(520, Math.max(430, height * 0.62));
-const cardWidth = Math.min(width - 32, 430);
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export const COLORS = {
   background: "#F4F7F5",
@@ -19,7 +16,17 @@ export const COLORS = {
   placeholder: "#A6B0AB",
 };
 
-export default StyleSheet.create({
+export function createLoginStyles(windowWidth, windowHeight) {
+  const width = windowWidth || Dimensions.get("window").width;
+  const height = windowHeight || Dimensions.get("window").height;
+  const compactHeight = height < 720;
+  const narrow = width < 360;
+  const heroHeight = clamp(height * 0.58, compactHeight ? 390 : 430, 520);
+  const panelOverlap = clamp(height * 0.2, compactHeight ? 132 : 150, 188);
+  const cardWidth = Math.min(width - 32, 430);
+  const heroBottomPadding = panelOverlap + (compactHeight ? 44 : 58);
+
+  return StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -34,13 +41,14 @@ export default StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     minHeight: height,
+    paddingBottom: compactHeight ? 28 : 36,
     backgroundColor: COLORS.background,
   },
   heroBg: {
     height: heroHeight,
     justifyContent: "flex-end",
-    paddingHorizontal: width < 360 ? 28 : 34,
-    paddingBottom: compactHeight ? 220 : 248,
+    paddingHorizontal: narrow ? 28 : 34,
+    paddingBottom: heroBottomPadding,
     overflow: "hidden",
   },
   heroImage: {
@@ -53,10 +61,10 @@ export default StyleSheet.create({
   },
   heroDiagonalCut: {
     position: "absolute",
-    left: -34,
-    right: -34,
-    bottom: -86,
-    height: 160,
+    left: -width * 0.1,
+    right: -width * 0.1,
+    bottom: -clamp(height * 0.1, 66, 88),
+    height: clamp(height * 0.17, 128, 164),
     backgroundColor: COLORS.background,
     transform: [{ rotate: "-12deg" }],
   },
@@ -88,9 +96,9 @@ export default StyleSheet.create({
     width: cardWidth,
     maxWidth: 430,
     alignSelf: "center",
-    marginTop: -190,
+    marginTop: -panelOverlap,
     marginBottom: compactHeight ? 28 : 42,
-    paddingHorizontal: width < 360 ? 22 : 26,
+    paddingHorizontal: narrow ? 22 : 26,
     paddingTop: compactHeight ? 24 : 30,
     paddingBottom: compactHeight ? 22 : 28,
     backgroundColor: COLORS.white,
@@ -278,4 +286,8 @@ export default StyleSheet.create({
     paddingTop: compactHeight ? 20 : 26,
     paddingBottom: 2,
   },
-});
+  });
+}
+
+const defaultDimensions = Dimensions.get("window");
+export default createLoginStyles(defaultDimensions.width, defaultDimensions.height);

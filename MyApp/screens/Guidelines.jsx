@@ -5,6 +5,7 @@ import {
   Text,
   FlatList,
   ActivityIndicator,
+  Animated,
   TouchableOpacity,
   Image,
   Linking,
@@ -15,11 +16,14 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "../lib/api";
 import styles, { COLORS } from "../Designs/Guidelines";
 import { UserContext } from "./UserContext";
 import { NotificationContext } from "./contexts/NotificationContext";
 import { ThemeContext } from "./contexts/ThemeContext";
+
+const SAVED_GUIDELINES_KEY = "sagipbayan.savedGuidelinesOffline";
 import {
   isSafeHttpUrl,
   sanitizeSearchText,
@@ -38,12 +42,27 @@ export default function GuidelinesListScreen({ navigation, route }) {
   const [searchText, setSearchText] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [selectedGuideline, setSelectedGuideline] = useState(null);
+  const [savedGuidelineIds, setSavedGuidelineIds] = useState([]);
   const openedRouteGuidelineIdRef = useRef(null);
   const categories = ["all", "earthquake", "flood", "typhoon", "general"];
 
   useEffect(() => {
     fetchGuidelines();
   }, [selectedCategory, user?._id]);
+
+  useEffect(() => {
+    let active = true;
+    loadSavedGuidelines()
+      .then((saved) => {
+        if (!active) return;
+        setSavedGuidelineIds(saved.map((item) => getItemId(item)).filter(Boolean));
+      })
+      .catch((error) => console.log("[guidelines] saved load failed:", error?.message));
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     handleSearch(searchText);
@@ -78,13 +97,20 @@ export default function GuidelinesListScreen({ navigation, route }) {
     setGuidelines(visibleItems);
     setFilteredGuidelines(visibleItems);
     console.log("[guidelines] fetched published count", visibleItems.length);
-    await refreshNotifications?.();
+    refreshNotifications?.().catch((notifyError) => {
+      console.log("[notifications] refresh after feed fetch failed:", notifyError?.message);
+    });
   } catch (error) {
     console.log("Error fetching guidelines:", {
       message: error?.message,
       status: error?.response?.status,
       data: error?.response?.data,
     });
+    const saved = await loadSavedGuidelines();
+    if (saved.length) {
+      setGuidelines(saved);
+      setFilteredGuidelines(saved);
+    }
   } finally {
     setLoading(false);
   }
@@ -93,7 +119,9 @@ export default function GuidelinesListScreen({ navigation, route }) {
     const cleanText = sanitizeSearchText(text);
     setSearchText(cleanText);
 
-    if (!cleanText) {
+    const queryText = cleanText.trim();
+
+    if (!queryText) {
       setFilteredGuidelines(guidelines);
       setSuggestions([]);
       return;
@@ -102,7 +130,7 @@ export default function GuidelinesListScreen({ navigation, route }) {
     const filtered = guidelines.filter((item) =>
       safeDisplayText(item?.title, "")
         .toLowerCase()
-        .includes(cleanText.toLowerCase())
+        .includes(queryText.toLowerCase())
     );
 
     setFilteredGuidelines(filtered);
@@ -119,14 +147,15 @@ export default function GuidelinesListScreen({ navigation, route }) {
   };
 
   const updateGuidelineInState = (nextItem) => {
+    const nextId = getItemId(nextItem);
     setGuidelines((prev) =>
-      prev.map((item) => (item._id === nextItem._id ? { ...item, ...nextItem } : item))
+      prev.map((item) => (getItemId(item) === nextId ? { ...item, ...nextItem } : item))
     );
     setFilteredGuidelines((prev) =>
-      prev.map((item) => (item._id === nextItem._id ? { ...item, ...nextItem } : item))
+      prev.map((item) => (getItemId(item) === nextId ? { ...item, ...nextItem } : item))
     );
     setSelectedGuideline((current) =>
-      current?._id === nextItem._id ? { ...current, ...nextItem } : current
+      getItemId(current) === nextId ? { ...current, ...nextItem } : current
     );
   };
 
@@ -202,13 +231,49 @@ export default function GuidelinesListScreen({ navigation, route }) {
   const toggleGuidelineLike = async (item) => {
     if (!user?._id || !item?._id) return;
 
+    const wasLiked = Boolean(item.likedByCurrentUser);
+    const nextLiked = !wasLiked;
+    const currentLikes = Number(item?.likeCount ?? 0);
+    const optimisticLikeCount = Math.max(0, currentLikes + (nextLiked ? 1 : -1));
+    const optimisticItem = {
+      ...item,
+      likedByCurrentUser: nextLiked,
+      likeCount: optimisticLikeCount,
+    };
+
+    updateGuidelineInState(optimisticItem);
+
     try {
       const response = await api.post(`/api/guidelines/${item._id}/like`, {
         userId: user._id,
       });
-      updateGuidelineInState(response.data);
+      updateGuidelineInState({
+        ...response.data,
+        _id: item._id,
+        likedByCurrentUser: nextLiked,
+        likeCount: Number(response.data?.likeCount ?? optimisticLikeCount),
+      });
     } catch (error) {
+      updateGuidelineInState(item);
       console.log("Error toggling guideline like:", error?.message);
+    }
+  };
+
+  const toggleSavedGuideline = async (item) => {
+    const itemId = getItemId(item);
+    if (!itemId) return;
+
+    try {
+      const saved = await loadSavedGuidelines();
+      const exists = saved.some((savedItem) => getItemId(savedItem) === itemId);
+      const next = exists
+        ? saved.filter((savedItem) => getItemId(savedItem) !== itemId)
+        : [buildOfflineGuideline(item), ...saved.filter((savedItem) => getItemId(savedItem) !== itemId)];
+
+      await AsyncStorage.setItem(SAVED_GUIDELINES_KEY, JSON.stringify(next));
+      setSavedGuidelineIds(next.map((savedItem) => getItemId(savedItem)).filter(Boolean));
+    } catch (error) {
+      console.log("[guidelines] saved write failed:", error?.message);
     }
   };
 
@@ -216,60 +281,72 @@ export default function GuidelinesListScreen({ navigation, route }) {
     <TouchableOpacity
       style={[styles.card, themed.card]}
       onPress={() => openGuideline(item)}
-      activeOpacity={0.88}
+      activeOpacity={0.92}
     >
-      {getPrimaryImage(item) && (
+      <View style={localStyles.postHeader}>
+        <View style={[localStyles.publisherAvatar, themed.softIcon]}>
+          <Ionicons name={getCategoryIcon(item?.category)} size={20} color={theme.primary} />
+        </View>
+        <View style={localStyles.publisherCopy}>
+          <Text style={[localStyles.publisherName, themed.text]}>MDRRMO Guidelines</Text>
+          <Text style={[localStyles.publisherMeta, themed.mutedText]}>
+            {formatDate(item?.createdAt)} - Safety guide
+          </Text>
+        </View>
+        <View style={[localStyles.officialBadge, themed.surfaceBorder]}>
+          <Ionicons name="checkmark-circle" size={14} color={theme.primary} />
+          <Text style={[localStyles.officialBadgeText, { color: theme.primary }]}>Official</Text>
+        </View>
+      </View>
+
+      {getPrimaryImage(item) ? (
         <ResponsiveAttachmentImage
           uri={getPrimaryImage(item).fileUrl}
           style={localStyles.postImage}
-          maxHeight={230}
-          minHeight={170}
+          maxHeight={360}
+          minHeight={240}
           onPress={() => openGuideline(item)}
         />
-      )}
-      <View style={localStyles.postBody}>
-        <Text style={[styles.title, themed.text]} numberOfLines={2}>
-          {safeDisplayText(item?.title, "Untitled guideline")}
-        </Text>
-
-        {!!item.description && (
-          <Text style={[styles.desc, themed.mutedText]} numberOfLines={3}>
-            {safeDisplayText(item?.description, "")}
+      ) : (
+        <View style={[localStyles.textOnlyMedia, themed.surfaceBorder]}>
+          <Ionicons name={getCategoryIcon(item?.category)} size={34} color={theme.primary} />
+          <Text style={[localStyles.textOnlyMediaTitle, themed.text]} numberOfLines={3}>
+            {safeDisplayText(item?.title, "Untitled guideline")}
           </Text>
-        )}
+        </View>
+      )}
 
-        <View style={localStyles.engagementLine}>
-          <EngagementRow item={item} />
-          <TouchableOpacity
-            style={[
-              localStyles.likeButton,
-              item.likedByCurrentUser && localStyles.likeButtonActive,
-              !user?._id && localStyles.likeButtonDisabled,
-            ]}
+      <View style={localStyles.actionBar}>
+        <View style={localStyles.actionCluster}>
+          <AnimatedHeartButton
+            liked={item.likedByCurrentUser}
             disabled={!user?._id}
             onPress={() => toggleGuidelineLike(item)}
-          >
-            <Ionicons
-              name={item.likedByCurrentUser ? "heart" : "heart-outline"}
-              size={17}
-              color={item.likedByCurrentUser ? "#FFFFFF" : COLORS.green}
-            />
-            <Text
-              style={[
-                localStyles.likeButtonText,
-                item.likedByCurrentUser && localStyles.likeButtonTextActive,
-              ]}
-            >
-              {item.likedByCurrentUser ? "Liked" : "Like"}
-            </Text>
-          </TouchableOpacity>
+            color={theme.text}
+            actionStyle={localStyles.iconAction}
+          />
         </View>
+        <TouchableOpacity style={localStyles.iconAction} onPress={(event) => { event?.stopPropagation?.(); toggleSavedGuideline(item); }} activeOpacity={0.75}>
+          <Ionicons
+            name={savedGuidelineIds.includes(getItemId(item)) ? "bookmark" : "bookmark-outline"}
+            size={27}
+            color={savedGuidelineIds.includes(getItemId(item)) ? theme.primary : theme.text}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={localStyles.postBody}>
+        <EngagementRow item={item} theme={theme} />
+
+        <Text style={[localStyles.postCaption, themed.text]} numberOfLines={3}>
+          <Text style={[localStyles.captionAuthor, themed.text]}>MDRRMO Guidelines </Text>
+          {safeDisplayText(item?.title, "Untitled guideline")}
+          {!!item.description ? ` ${safeDisplayText(item?.description, "")}` : ""}
+        </Text>
 
         <View style={localStyles.postMetaRow}>
-          <Text style={localStyles.readMoreText}>Read More</Text>
-          <View style={styles.metaRow}>
-            <MetaPill text={item.category || "general"} />
-          </View>
+          <Text style={[localStyles.postTimeText, themed.mutedText]}>{formatDate(item?.createdAt)}</Text>
+          <MetaPill text={item.category || "general"} />
         </View>
       </View>
     </TouchableOpacity>
@@ -519,19 +596,53 @@ function GuidelineModal({ item, userId, onToggleLike, onClose }) {
   );
 }
 
-function EngagementRow({ item }) {
+function AnimatedHeartButton({ liked, disabled, onPress, color, actionStyle }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  const handlePress = (event) => {
+    event?.stopPropagation?.();
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.28, duration: 90, useNativeDriver: true }),
+        Animated.spring(scale, { toValue: 1, friction: 3, tension: 180, useNativeDriver: true }),
+      ]),
+      Animated.sequence([
+        Animated.timing(rotate, { toValue: 1, duration: 55, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: -1, duration: 70, useNativeDriver: true }),
+        Animated.timing(rotate, { toValue: 0, duration: 65, useNativeDriver: true }),
+      ]),
+    ]).start();
+    onPress?.();
+  };
+
+  const spin = rotate.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ["-9deg", "0deg", "9deg"],
+  });
+
+  return (
+    <TouchableOpacity style={actionStyle} disabled={disabled} onPress={handlePress} activeOpacity={0.75}>
+      <Animated.View style={{ transform: [{ scale }, { rotate: spin }] }}>
+        <Ionicons name={liked ? "heart" : "heart-outline"} size={29} color={liked ? "#E11D48" : color} />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+function EngagementRow({ item, theme }) {
   const views = Number(item?.viewCount ?? item?.views ?? 0);
   const likes = Number(item?.likeCount ?? 0);
 
   return (
     <View style={localStyles.engagementRow}>
       <View style={localStyles.engagementPill}>
-        <Ionicons name="eye-outline" size={14} color="#647067" />
-        <Text style={localStyles.engagementText}>{views} seen</Text>
+        <Ionicons name="eye-outline" size={14} color={theme?.text || "#647067"} />
+        <Text style={[localStyles.engagementText, { color: theme?.text || COLORS.text }]}>{views} seen</Text>
       </View>
       <View style={localStyles.engagementPill}>
-        <Ionicons name="heart-outline" size={14} color="#647067" />
-        <Text style={localStyles.engagementText}>{likes} likes</Text>
+        <Ionicons name="heart-outline" size={14} color={theme?.text || "#647067"} />
+        <Text style={[localStyles.engagementText, { color: theme?.text || COLORS.text }]}>{likes} likes</Text>
       </View>
     </View>
   );
@@ -688,6 +799,23 @@ function ZoomableImageViewer({ image, title, onClose }) {
   );
 }
 
+function getItemId(item) {
+  return String(item?._id || item?.id || "");
+}
+
+function buildOfflineGuideline(item) {
+  return {
+    ...item,
+    savedOfflineAt: new Date().toISOString(),
+  };
+}
+
+async function loadSavedGuidelines() {
+  const raw = await AsyncStorage.getItem(SAVED_GUIDELINES_KEY);
+  const parsed = raw ? JSON.parse(raw) : [];
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 function getCategoryIcon(category) {
   switch (String(category || "").toLowerCase()) {
     case "earthquake":
@@ -753,19 +881,23 @@ const localStyles = StyleSheet.create({
   postHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
   },
   publisherAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: COLORS.greenSoft,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   publisherCopy: {
     flex: 1,
+    minWidth: 0,
   },
   publisherName: {
     color: COLORS.text,
@@ -776,11 +908,42 @@ const localStyles = StyleSheet.create({
     marginTop: 2,
     color: COLORS.textMuted,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  officialBadge: {
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.surfaceSoft,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  officialBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
   },
   postBody: {
-    padding: 16,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  postCaption: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+  },
+  captionAuthor: {
+    color: COLORS.text,
+    fontWeight: "900",
+  },
+  postTimeText: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
   },
   postImage: {
     width: "100%",
@@ -795,13 +958,49 @@ const localStyles = StyleSheet.create({
   },
   imageFrame: {
     width: "100%",
-    borderRadius: 8,
     overflow: "hidden",
     backgroundColor: "#EEF4EE",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: "rgba(220,231,216,0.92)",
+  },
+  textOnlyMedia: {
+    minHeight: 230,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E8F3EA",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
+  },
+  textOnlyMediaTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  actionBar: {
+    minHeight: 48,
+    paddingHorizontal: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  iconAction: {
+    width: 40,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
   },
   postMetaRow: {
     marginTop: 2,
@@ -824,24 +1023,19 @@ const localStyles = StyleSheet.create({
   engagementRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     flexWrap: "wrap",
   },
   engagementPill: {
-    minHeight: 28,
-    paddingHorizontal: 9,
-    borderRadius: 999,
-    backgroundColor: "#F8FAF7",
-    borderWidth: 1,
-    borderColor: "#E2E8E2",
+    minHeight: 22,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
   },
   engagementText: {
-    color: "#647067",
-    fontSize: 11,
-    fontWeight: "800",
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
   },
   modalEngagementRow: {
     marginTop: 18,
