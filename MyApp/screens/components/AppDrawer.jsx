@@ -162,7 +162,7 @@ export default function AppDrawer({
         style={[
           styles.drawer,
           themed.drawer,
-          { paddingTop: Math.max(insets.top + 14, 42), transform: [{ translateX }] },
+          { paddingTop: Math.max(insets.top + 24, 60), transform: [{ translateX }] },
         ]}
       >
         <View style={styles.headerRow}>
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
 
   headerRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingBottom: 12,
@@ -420,6 +420,7 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     marginRight: 12,
     backgroundColor: "#E5E7EB",
+    overflow: "hidden",
   },
 
   profileCopy: {

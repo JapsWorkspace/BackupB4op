@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   Dimensions,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import DataPrivacy from "./DataPrivacy";
@@ -39,7 +39,7 @@ export default function PrivacySwiper({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.78}>
           <Ionicons name="chevron-back" size={22} color="#1F5F3B" />

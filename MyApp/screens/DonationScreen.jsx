@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useCallback,
   useContext,
   useEffect,
@@ -11,7 +11,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +21,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   getMyDonations,
@@ -426,7 +426,7 @@ export default function DonationScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -813,7 +813,8 @@ function createStyles(theme) {
       flex: 1,
     },
     content: {
-      padding: 16,
+      paddingHorizontal: 16,
+      paddingTop: 18,
       paddingBottom: 34,
     },
     header: {

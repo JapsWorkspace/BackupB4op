@@ -22,6 +22,7 @@ import AppDrawer from "./components/AppDrawer";
 import LogoutModal from "./components/LogoutModal";
 import { safeDisplayText } from "./utils/validation";
 import { AppChromeContext } from "./contexts/AppChromeContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MAP_UI_SCREENS = new Set(["Map", "Connection"]);
 
@@ -33,6 +34,7 @@ export default function AppLayout({
 }) {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const { theme } = useContext(ThemeContext);
   const themed = useMemo(
     () => ({
@@ -146,6 +148,7 @@ export default function AppLayout({
           onResolveJoinRequest={resolveJoinRequest}
           onRefresh={refreshNotifications}
           theme={theme}
+          topOffset={Math.max(insets.top + 72, 102)}
           onOpenNotification={(item) => {
             if (isGuidelineNotification(item)) {
               setNotificationsOpen(false);
@@ -229,6 +232,7 @@ function NotificationFeed({
   onRefresh,
   theme,
   onOpenNotification,
+  topOffset = 104,
 }) {
   const [busyNotificationId, setBusyNotificationId] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
@@ -267,7 +271,7 @@ function NotificationFeed({
     <View
       style={[
         styles.notificationPanel,
-        { backgroundColor: theme.elevated, borderColor: theme.border },
+        { backgroundColor: theme.elevated, borderColor: theme.border, top: topOffset },
       ]}
     >
       <View style={styles.notificationHeader}>
@@ -350,8 +354,8 @@ function NotificationFeed({
                 {!!item.actorName && (
                   <Text style={[styles.notificationMeta, { color: theme.mutedText }]}>
                     {safeDisplayText(item.actorName, "Requester")}
-                    {item.actorUsername ? ` • @${item.actorUsername}` : ""}
-                    {item.connectionCode ? ` • ${item.connectionCode}` : ""}
+                    {item.actorUsername ? ` â€¢ @${item.actorUsername}` : ""}
+                    {item.connectionCode ? ` â€¢ ${item.connectionCode}` : ""}
                   </Text>
                 )}
                 <View style={styles.notificationFooter}>

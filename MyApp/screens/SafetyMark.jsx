@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   useCallback,
   useContext,
@@ -10,6 +11,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -23,9 +25,10 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Circle, Marker, Polygon, PROVIDER_GOOGLE } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
+import ViewShot from "react-native-view-shot";
 
 import api, { getApiBaseUrl, PROD_BASE } from "../lib/api";
 import {
@@ -57,6 +60,9 @@ const JAEN_INITIAL_REGION = {
   latitudeDelta: 0.12,
   longitudeDelta: 0.12,
 };
+
+const SAFETY_CONNECTIONS_CACHE_KEY = "sagipbayan.safetyMark.connections.v1";
+const SAFETY_DEBUG_MARKERS_CACHE_KEY = "sagipbayan.safetyMark.debugMarkers.v1";
 
 const OUTSIDE_JAEN_MASK = [
   { latitude: 16.2, longitude: 119.8 },
@@ -95,6 +101,22 @@ const getDebugMarkerPayload = (data) => {
 };
 const hasCoords = (location) =>
   typeof location?.lat === "number" && typeof location?.lng === "number";
+const readSafetyCache = async (key) => {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.log("[SafetyMark] cache read failed:", err?.message);
+    return [];
+  }
+};
+
+const writeSafetyCache = (key, value) => {
+  AsyncStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : [])).catch((err) => {
+    console.log("[SafetyMark] cache write failed:", err?.message);
+  });
+};
 
 const isLikelyNetworkError = (err) => {
   const message = String(err?.message || "").toLowerCase();
@@ -299,56 +321,118 @@ function resolveAvatarPath(avatar) {
   return `${assetBaseUrl}${avatar}`;
 }
 
-function ProfileSafetyMarker({ member }) {
+function NotSafeSignal({ coordinate }) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      setProgress(((Date.now() - startedAt) % 2000) / 2000);
+    }, 50);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const renderPulse = (pulseProgress, key) => {
+    const easedProgress = Easing.out(Easing.quad)(pulseProgress);
+    const radius = 60 + easedProgress * 640;
+    const opacity = Math.max(0, 0.72 * (1 - pulseProgress));
+
+    return (
+      <Circle
+      key={key}
+      center={coordinate}
+      radius={radius}
+      fillColor={`rgba(239,68,68,${opacity * 0.24})`}
+      strokeColor={`rgba(220,38,38,${opacity})`}
+      strokeWidth={3}
+      zIndex={900}
+    />
+    );
+  };
+
+  const secondProgress = (progress + 0.5) % 1;
+
+  return (
+    <>
+      {renderPulse(progress, "first")}
+      {renderPulse(secondProgress, "second")}
+    </>
+  );
+}
+
+function ProfileSafetyMarker({ member, coordinate }) {
+  const markerCaptureRef = useRef(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [markerImageUri, setMarkerImageUri] = useState(null);
   const markerColor = member?.safetyColor || getSafetyColor(member?.safetyStatus);
-  const avatarUri = !avatarFailed && member?.avatar ? resolveAvatarPath(member.avatar) : null;
+  const avatarUri = avatarFailed ? null : resolveAvatarPath(member?.avatar);
 
   useEffect(() => {
     setAvatarFailed(false);
-  }, [member?.avatar]);
+    setMarkerImageUri(null);
+  }, [member?.avatar, markerColor]);
+
+  const captureMarkerImage = useCallback(() => {
+    // Capture the finished React view ourselves, then hand Google Maps a plain
+    // PNG. This avoids react-native-maps' Android custom-view snapshot path.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
+        try {
+          const uri = await markerCaptureRef.current?.capture?.();
+          if (uri) setMarkerImageUri(uri);
+        } catch (err) {
+          console.log("[SafetyMark] avatar marker capture failed:", err?.message);
+        }
+      });
+    });
+  }, []);
+
+  const handleAvatarError = useCallback(() => {
+    setAvatarFailed(true);
+  }, []);
+
+  useEffect(() => {
+    if (avatarFailed) captureMarkerImage();
+  }, [avatarFailed, captureMarkerImage]);
+
+  const markerProps = {
+    coordinate,
+    anchor: { x: 0.5, y: 0.5 },
+    zIndex: member.isCurrentUser ? 1200 : 999,
+    flat: false,
+  };
+
+  if (markerImageUri) {
+    return <Marker {...markerProps} image={{ uri: markerImageUri }} tracksViewChanges={false} />;
+  }
 
   return (
-    <View
-      style={styles.profilePinShell}
-      collapsable={false}
-      pointerEvents="none"
-      renderToHardwareTextureAndroid
-      needsOffscreenAlphaCompositing
-    >
-      <View
-        style={[styles.profilePin, { backgroundColor: markerColor }]}
+    <Marker {...markerProps} tracksViewChanges>
+      <ViewShot
+        ref={markerCaptureRef}
+        style={styles.profilePinShell}
+        options={{ format: "png", quality: 1, result: "tmpfile" }}
         collapsable={false}
       >
-        {avatarUri ? (
-          <Image
-            source={{ uri: avatarUri }}
-            style={styles.profilePinAvatar}
-            resizeMode="cover"
-            onError={() => {
-              setAvatarFailed(true);
-            }}
-          />
-        ) : (
-          <View
-            style={[
-              styles.profilePinIconFallback,
-              { backgroundColor: `${markerColor}18` },
-            ]}
-            collapsable={false}
-          >
-            <Ionicons name="person" size={24} color={markerColor} />
-          </View>
-        )}
-      </View>
-      {member?.isCurrentUser ? (
-        <View style={styles.profilePinLabel} collapsable={false}>
-          <Text style={styles.profilePinLabelText}>
-            {member?.privateOnly ? "You only" : "You"}
-          </Text>
+        <View style={[styles.profilePin, { borderColor: markerColor }]} collapsable={false}>
+          {avatarUri ? (
+            <Image
+              source={{ uri: avatarUri }}
+              style={styles.profilePinAvatar}
+              resizeMode="cover"
+              fadeDuration={0}
+              onLoad={captureMarkerImage}
+              onError={handleAvatarError}
+            />
+          ) : (
+            <View style={[styles.profilePinIconSurface, { backgroundColor: `${markerColor}16` }]}>
+              <Ionicons name="person" size={24} color={markerColor} />
+            </View>
+          )}
         </View>
-      ) : null}
-    </View>
+      </ViewShot>
+    </Marker>
   );
 }
 
@@ -857,15 +941,35 @@ export default function SafetyMark() {
   const fetchConnections = useCallback(async () => {
     if (!user?._id) {
       setConnections([]);
-      return;
+      return [];
     }
 
-    const res = await api.get(`/connection/user/${user._id}`);
-    setConnections(
-      safeArray(res.data)
+    try {
+      const res = await api.get(`/connection/user/${user._id}`);
+      const rawConnections = safeArray(res.data);
+      const nextConnections = rawConnections
         .map((item) => normalizeConnection(item, user._id))
-      .filter(Boolean)
-    );
+        .filter(Boolean);
+
+      setConnections(nextConnections);
+      setIsOffline(false);
+      writeSafetyCache(SAFETY_CONNECTIONS_CACHE_KEY, rawConnections);
+      return nextConnections;
+    } catch (err) {
+      if (!isLikelyNetworkError(err)) throw err;
+
+      setIsOffline(true);
+      const cachedConnections = (await readSafetyCache(SAFETY_CONNECTIONS_CACHE_KEY))
+        .map((item) => normalizeConnection(item, user._id))
+        .filter(Boolean);
+
+      if (cachedConnections.length) {
+        setConnections(cachedConnections);
+      }
+
+      console.log("[SafetyMark] connection fetch failed, using cached data:", err?.message);
+      return cachedConnections;
+    }
   }, [user?._id]);
 
   const fetchDebugMarkers = useCallback(async () => {
@@ -890,10 +994,26 @@ export default function SafetyMark() {
       );
       setIsOffline(false);
       setDebugMarkers(nextMarkers);
+      writeSafetyCache(SAFETY_DEBUG_MARKERS_CACHE_KEY, rawMarkers);
       console.log("[markers] refetched:", nextMarkers.length);
       return nextMarkers;
     } catch (err) {
-      if (isLikelyNetworkError(err)) setIsOffline(true);
+      if (isLikelyNetworkError(err)) {
+        setIsOffline(true);
+        const cachedMarkers = dedupeMarkersByUserId(
+          (await readSafetyCache(SAFETY_DEBUG_MARKERS_CACHE_KEY))
+            .map((item) => normalizeDebugMarker(item, user?._id))
+            .filter(Boolean)
+        );
+
+        if (cachedMarkers.length) {
+          setDebugMarkers(cachedMarkers);
+        }
+
+        console.log("[SafetyMark] debug marker fetch failed, using cached data:", err?.message);
+        return cachedMarkers;
+      }
+
       console.log("[SafetyMark] debug marker fetch failed:", err?.message);
       return [];
     }
@@ -1310,11 +1430,6 @@ export default function SafetyMark() {
     }
   }, [user?._id, visibleMembersOnMap]);
 
-  const outsideCount = useMemo(
-    () => allPeople.filter((member) => member.location && !member.insideJaen).length,
-    [allPeople]
-  );
-
   const selectedConnectionMembers = useMemo(
     () => safeArray(selectedConnection?.members),
     [selectedConnection]
@@ -1667,6 +1782,10 @@ export default function SafetyMark() {
         style={styles.map}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={JAEN_INITIAL_REGION}
+        mapType="standard"
+        loadingEnabled
+        loadingBackgroundColor="#E9EFE8"
+        loadingIndicatorColor="#0B7F55"
         minZoomLevel={11}
         toolbarEnabled={false}
         rotateEnabled={false}
@@ -1678,19 +1797,21 @@ export default function SafetyMark() {
         {barangayBoundaryOutlines}
         {jaenBoundary}
         {visibleMembersOnMap.map((member) =>
-          member.coordinate ? (
-            <Marker
-              key={`${member.debugMode ? "debug" : "live"}-${member.id}-${member.safetyStatus}-${member.safetyColor}`}
+          member.coordinate &&
+          normalizeSafetyStatusValue(member.safetyStatus) === "NOT_SAFE" ? (
+            <NotSafeSignal
+              key={`not-safe-signal-${member.id}`}
               coordinate={member.coordinate}
-              title={member.username}
-              description={member.safetyLabel}
-              anchor={{ x: 0.5, y: 0.5 }}
-              zIndex={member.isCurrentUser ? 1200 : 999}
-              flat={false}
-              tracksViewChanges
-            >
-              <ProfileSafetyMarker member={member} />
-            </Marker>
+            />
+          ) : null
+        )}
+        {visibleMembersOnMap.map((member) =>
+          member.coordinate ? (
+            <ProfileSafetyMarker
+              key={`${member.debugMode ? "debug" : "live"}-${member.id}-${member.safetyStatus}-${member.safetyColor}`}
+              member={member}
+              coordinate={member.coordinate}
+            />
           ) : null
         )}
       </MapView>
@@ -1698,110 +1819,93 @@ export default function SafetyMark() {
       {isOffline && (
         <View style={styles.offlineBanner} pointerEvents="none">
           <Ionicons name="cloud-offline-outline" size={16} color="#FFFFFF" />
-          <Text style={styles.offlineBannerText}>No internet connection</Text>
+          <Text style={styles.offlineBannerText}>No internet connection - showing saved map data</Text>
         </View>
       )}
-
-      <View style={[styles.mapLegend, isOffline && styles.mapLegendOffline]}>
-        <View style={styles.legendBadge}>
-          <Text style={styles.legendBadgeText}>Jaen Safety Map</Text>
-        </View>
-        <Text style={styles.legendNote}>
-          {safetyDebugMode
-            ? "Debug Mode ON: synced demo markers inside Jaen"
-            : outsideCount > 0
-              ? `${outsideCount} outside Jaen`
-              : "Inside-Jaen markers only"}
-        </Text>
-      </View>
 
       <KeyboardAvoidingView
         style={styles.panelLayer}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         pointerEvents="box-none"
       >
-        <Animated.View style={[styles.floatingTabWrap, { top: Animated.add(panelTop, -76) }]}>
-          <View style={styles.floatingTabRow}>
-            <Pressable
-              style={[
-                styles.floatingTabButton,
-                themed.floatingTabButton,
-                activeTab === "status" && themed.floatingTabButtonActive,
-              ]}
-              onPress={() => setActiveTab("status")}
-            >
-              <Ionicons
-                name="people-outline"
-                size={16}
-                color={activeTab === "status" ? theme.buttonText : theme.subtext}
-              />
-              <Text
-                style={[
-                  styles.floatingTabText,
-                  themed.floatingTabText,
-                  activeTab === "status" && themed.floatingTabTextActive,
-                ]}
-              >
-                Status
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.floatingTabButton,
-                themed.floatingTabButton,
-                activeTab === "manage" && themed.floatingTabButtonActive,
-              ]}
-              onPress={() => setActiveTab("manage")}
-            >
-              <Ionicons
-                name="git-network-outline"
-                size={16}
-                color={activeTab === "manage" ? theme.buttonText : theme.subtext}
-              />
-              <Text
-                style={[
-                  styles.floatingTabText,
-                  themed.floatingTabText,
-                  activeTab === "manage" && themed.floatingTabTextActive,
-                ]}
-              >
-                Manage
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.floatingTabButton,
-                themed.floatingTabButton,
-                activeTab === "join" && themed.floatingTabButtonActive,
-              ]}
-              onPress={() => setActiveTab("join")}
-            >
-              <Ionicons
-                name="add-circle-outline"
-                size={16}
-                color={activeTab === "join" ? theme.buttonText : theme.subtext}
-              />
-              <Text
-                style={[
-                  styles.floatingTabText,
-                  themed.floatingTabText,
-                  activeTab === "join" && themed.floatingTabTextActive,
-                ]}
-              >
-                Join + Create
-              </Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-
         <Animated.View style={[styles.panel, themed.panel, { top: panelTop }]}>
           <View style={[styles.panelDragZone, themed.panelDragZone]} {...panResponder.panHandlers}>
             <View style={[styles.dragHandleWrap, themed.dragHandleWrap]}>
               <View style={[styles.dragHandle, themed.dragHandle]} />
             </View>
+            <View style={styles.sheetTabRow}>
+              <Pressable
+                style={[
+                  styles.sheetTabButton,
+                  themed.floatingTabButton,
+                  activeTab === "status" && themed.floatingTabButtonActive,
+                ]}
+                onPress={() => setActiveTab("status")}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={16}
+                  color={activeTab === "status" ? theme.buttonText : theme.subtext}
+                />
+                <Text
+                  style={[
+                    styles.sheetTabText,
+                    themed.floatingTabText,
+                    activeTab === "status" && themed.floatingTabTextActive,
+                  ]}
+                >
+                  Status
+                </Text>
+              </Pressable>
 
+              <Pressable
+                style={[
+                  styles.sheetTabButton,
+                  themed.floatingTabButton,
+                  activeTab === "manage" && themed.floatingTabButtonActive,
+                ]}
+                onPress={() => setActiveTab("manage")}
+              >
+                <Ionicons
+                  name="git-network-outline"
+                  size={16}
+                  color={activeTab === "manage" ? theme.buttonText : theme.subtext}
+                />
+                <Text
+                  style={[
+                    styles.sheetTabText,
+                    themed.floatingTabText,
+                    activeTab === "manage" && themed.floatingTabTextActive,
+                  ]}
+                >
+                  Manage
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.sheetTabButton,
+                  themed.floatingTabButton,
+                  activeTab === "join" && themed.floatingTabButtonActive,
+                ]}
+                onPress={() => setActiveTab("join")}
+              >
+                <Ionicons
+                  name="add-circle-outline"
+                  size={16}
+                  color={activeTab === "join" ? theme.buttonText : theme.subtext}
+                />
+                <Text
+                  style={[
+                    styles.sheetTabText,
+                    themed.floatingTabText,
+                    activeTab === "join" && themed.floatingTabTextActive,
+                  ]}
+                >
+                  Join
+                </Text>
+              </Pressable>
+            </View>
             <View style={[styles.sheetIntro, themed.sheetIntro]}>
               <View style={styles.sheetIntroCopy}>
                 <Text style={[styles.sheetIntroTitle, themed.text]}>{activeTabMeta.title}</Text>
@@ -2222,44 +2326,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  mapLegend: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 126 : 96,
-    left: 16,
-    right: 16,
-    zIndex: 10,
-    pointerEvents: "none",
-  },
-
-  mapLegendOffline: {
-    top: Platform.OS === "ios" ? 168 : 146,
-  },
-
-  legendBadge: {
-    alignSelf: "flex-start",
-    minHeight: 34,
-    paddingHorizontal: 12,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.94)",
-    justifyContent: "center",
-  },
-
-  legendBadgeText: {
-    color: "#26412F",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  legendNote: {
-    marginTop: 6,
-    color: "#F8FAF8",
-    fontSize: 11,
-    fontWeight: "700",
-    textShadowColor: "rgba(0,0,0,0.18)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-
   profilePinShell: {
     width: 64,
     height: 64,
@@ -2271,32 +2337,36 @@ const styles = StyleSheet.create({
   },
 
   profilePin: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 3,
+    overflow: "hidden",
     shadowColor: "#12281A",
-    shadowOpacity: 0.24,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
 
   profilePinAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#E5E7EB",
+    overflow: "hidden",
   },
 
-  profilePinIconFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+  profilePinIconSurface: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
 
   profilePinLabel: {
@@ -2320,47 +2390,30 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
 
-  floatingTabWrap: {
-    position: "absolute",
-    left: 30,
-    right: 30,
-    zIndex: 12,
-  },
-
-  floatingTabRow: {
+  sheetTabRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     justifyContent: "space-between",
+    marginBottom: 12,
   },
 
-  floatingTabButton: {
+  sheetTabButton: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 18,
+    minHeight: 42,
+    borderRadius: 16,
     backgroundColor: "rgba(251,253,250,0.98)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    shadowColor: "#12281A",
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#DCE9D6",
   },
 
-  floatingTabButtonActive: {
-    backgroundColor: "#486742",
-  },
-
-  floatingTabText: {
+  sheetTabText: {
     color: "#536755",
     fontSize: 12,
     fontWeight: "800",
-  },
-
-  floatingTabTextActive: {
-    color: "#FFFFFF",
   },
 
   panel: {
@@ -2932,6 +2985,7 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     backgroundColor: "#DCE7D8",
+    overflow: "hidden",
   },
 
   pendingCopy: {
@@ -3059,7 +3113,11 @@ const styles = StyleSheet.create({
 
   personAvatarWrap: {
     position: "relative",
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     marginLeft: 8,
+    overflow: "visible",
   },
 
   personAvatar: {
@@ -3067,6 +3125,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: "#DCE7D8",
+    overflow: "hidden",
   },
 
   personAvatarDot: {

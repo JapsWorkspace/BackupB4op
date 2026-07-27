@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { sanitizeSearchText, safeDisplayText } from "../utils/validation";
 import { useTheme } from "../contexts/ThemeContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function AppTopBar({
   onMenuPress,
@@ -22,8 +23,9 @@ export default function AppTopBar({
   suggestions = [],
   onSelectSuggestion,
 }) {
-  // ✅ local controlled input state
+  // âœ… local controlled input state
   const [value, setValue] = useState("");
+  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const themed = useMemo(() => createThemedStyles(theme), [theme]);
 
@@ -34,7 +36,7 @@ export default function AppTopBar({
   };
 
   /**
-   * ✅ IMPORTANT:
+   * âœ… IMPORTANT:
    * This function forwards the FULL suggestion object exactly as received.
    * This includes:
    * - latitude
@@ -46,19 +48,21 @@ export default function AppTopBar({
    * DO NOT destructure or rebuild `item` here.
    */
   const handleSelect = (item) => {
-    // ✅ clear UI immediately
+    // âœ… clear UI immediately
     setValue("");
     Keyboard.dismiss();
 
-    // ✅ forward FULL object to parent (navigation happens there)
+    // âœ… forward FULL object to parent (navigation happens there)
     onSelectSuggestion?.(item);
 
-    // ✅ clear suggestions
+    // âœ… clear suggestions
     onSearchChange?.("");
   };
 
+  const topOffset = Math.max(insets.top + 12, Platform.OS === "ios" ? 58 : 40);
+
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { top: topOffset }]}>
       <View style={styles.container}>
         <TouchableOpacity style={[styles.iconButton, themed.floatingSurface]} onPress={onMenuPress}>
           <Ionicons name="menu" size={24} color={theme.text} />
@@ -97,7 +101,7 @@ export default function AppTopBar({
         </TouchableOpacity>
       </View>
 
-      {/* ✅ Suggestions dropdown */}
+      {/* âœ… Suggestions dropdown */}
       {showSearch && suggestions.length > 0 && (
         <View style={[styles.dropdown, themed.dropdown]}>
           <FlatList
@@ -132,7 +136,6 @@ export default function AppTopBar({
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 76 : 46,
     left: 16,
     right: 16,
     zIndex: 6000,
