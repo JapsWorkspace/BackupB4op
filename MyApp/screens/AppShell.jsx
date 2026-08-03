@@ -28,6 +28,7 @@ import { getSocket } from "../lib/socket";
 const Stack = createNativeStackNavigator();
 const MAP_UI_SCREENS = new Set(["Map"]);
 const INCIDENT_REFRESH_POLL_INTERVAL_MS = 5000;
+const BOTTOM_NAV_GESTURE_LOCK_MAX_MS = 900;
 
 function getIncidentListSignature(items) {
   return (Array.isArray(items) ? items : [])
@@ -149,9 +150,41 @@ export default function AppShell() {
   const [showEarthquakeHazard, setShowEarthquakeHazard] = useState(false);
 
   const [isBottomNavInteracting, setIsBottomNavInteracting] = useState(false);
+  const bottomNavGestureReleaseTimerRef = useRef(null);
+
+  const setBottomNavInteracting = useCallback((value) => {
+    if (bottomNavGestureReleaseTimerRef.current) {
+      clearTimeout(bottomNavGestureReleaseTimerRef.current);
+      bottomNavGestureReleaseTimerRef.current = null;
+    }
+
+    setIsBottomNavInteracting(Boolean(value));
+
+    if (value) {
+      bottomNavGestureReleaseTimerRef.current = setTimeout(() => {
+        bottomNavGestureReleaseTimerRef.current = null;
+        setIsBottomNavInteracting(false);
+      }, BOTTOM_NAV_GESTURE_LOCK_MAX_MS);
+    }
+  }, []);
 
   const [currentScreen, setCurrentScreen] = useState("Map");
+
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    setBottomNavInteracting(false);
+  }, [activeMapModule, currentScreen, setBottomNavInteracting]);
+
+  useEffect(
+    () => () => {
+      if (bottomNavGestureReleaseTimerRef.current) {
+        clearTimeout(bottomNavGestureReleaseTimerRef.current);
+        bottomNavGestureReleaseTimerRef.current = null;
+      }
+    },
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -213,7 +246,7 @@ export default function AppShell() {
       setShowEarthquakeHazard,
 
       isBottomNavInteracting,
-      setIsBottomNavInteracting,
+      setIsBottomNavInteracting: setBottomNavInteracting,
     }),
     [
       activeMapModule,
@@ -230,6 +263,7 @@ export default function AppShell() {
       showFloodMap,
       showEarthquakeHazard,
       isBottomNavInteracting,
+      setBottomNavInteracting,
     ]
   );
 

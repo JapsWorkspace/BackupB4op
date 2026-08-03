@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -23,6 +23,11 @@ import { COLORS, createLoginStyles } from "../Designs/LogIn";
 import { UserContext } from "./UserContext";
 import { sanitizeUsername } from "./utils/validation";
 
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 10 * 60 * 1000;
+const LOGIN_LOCKOUT_MESSAGE =
+  "Too many failed attempts. Login is locked for 10 minutes.";
+
 export default function LogIn({ navigation }) {
   const initialMetrics = useRef(Dimensions.get("window")).current;
   const styles = useMemo(
@@ -35,6 +40,9 @@ export default function LogIn({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [staySignedIn] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
+  const [lockUntil, setLockUntil] = useState(0);
+  const [lockRemainingMs, setLockRemainingMs] = useState(0);
   const [focusedField, setFocusedField] = useState(null);
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);
@@ -42,6 +50,29 @@ export default function LogIn({ navigation }) {
   const passwordErrorAnim = useRef(new Animated.Value(0)).current;
 
   const { setUser } = useContext(UserContext);
+  const isLoginLocked = lockUntil > Date.now() || lockRemainingMs > 0;
+
+  useEffect(() => {
+    if (!lockUntil) {
+      setLockRemainingMs(0);
+      return undefined;
+    }
+
+    const updateLockRemaining = () => {
+      const remainingMs = Math.max(0, lockUntil - Date.now());
+      setLockRemainingMs(remainingMs);
+
+      if (remainingMs <= 0) {
+        setLockUntil(0);
+        setFailedLoginAttempts(0);
+      }
+    };
+
+    updateLockRemaining();
+    const timerId = setInterval(updateLockRemaining, 1000);
+
+    return () => clearInterval(timerId);
+  }, [lockUntil]);
 
   const runFieldErrorAnimation = (field) => {
     const target = field === "username" ? usernameErrorAnim : passwordErrorAnim;
@@ -108,7 +139,7 @@ export default function LogIn({ navigation }) {
     }
 
     if (err?.response?.status === 401 || text.includes("invalid")) {
-      return "Invalid username or password.";
+      return "Invalid username or password";
     }
 
     if (text.includes("network") || text.includes("timeout")) {
@@ -120,12 +151,12 @@ export default function LogIn({ navigation }) {
 
   const validate = () => {
     if (!sanitizeUsername(username)) {
-      showLoginError("Username is required.", "username");
+      showLoginError("Username is required", "username");
       return false;
     }
 
     if (!String(password || "").trim()) {
-      showLoginError("Password is required.", "password");
+      showLoginError("Password is required", "password");
       return false;
     }
 
@@ -135,7 +166,14 @@ export default function LogIn({ navigation }) {
   const handleLogin = async () => {
     setError("");
 
-    if (isSubmitting || !validate()) return;
+    if (isSubmitting) return;
+
+    if (isLoginLocked) {
+      showLoginError(LOGIN_LOCKOUT_MESSAGE, "both");
+      return;
+    }
+
+    if (!validate()) return;
 
     setIsSubmitting(true);
 
@@ -148,6 +186,9 @@ export default function LogIn({ navigation }) {
       const data = res.data || {};
 
       if (data.twoFactor && data.email) {
+        setFailedLoginAttempts(0);
+        setLockUntil(0);
+        setLockRemainingMs(0);
         navigation.navigate("VerifyOtp", {
           userId: data.userId,
           email: data.email,
@@ -167,10 +208,34 @@ export default function LogIn({ navigation }) {
         id: data.user._id,
       }, { persist: staySignedIn });
 
+      setFailedLoginAttempts(0);
+      setLockUntil(0);
+      setLockRemainingMs(0);
       setUsername("");
       setPassword("");
     } catch (err) {
-      showLoginError(getLoginErrorMessage(err), "both");
+      const message = getLoginErrorMessage(err);
+      const raw =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "";
+      const isInvalidCredentials =
+        err?.response?.status === 401 ||
+        String(raw).toLowerCase().includes("invalid");
+
+      if (isInvalidCredentials) {
+        const nextAttempts = failedLoginAttempts + 1;
+        setFailedLoginAttempts(nextAttempts);
+
+        if (nextAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+          setLockUntil(Date.now() + LOGIN_LOCKOUT_MS);
+          showLoginError(LOGIN_LOCKOUT_MESSAGE, "both");
+          return;
+        }
+      }
+
+      showLoginError(message, "both");
     } finally {
       setIsSubmitting(false);
     }
@@ -289,9 +354,12 @@ export default function LogIn({ navigation }) {
             )}
 
             <TouchableOpacity
-              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
+              style={[
+                styles.loginButton,
+                (isSubmitting || isLoginLocked) && styles.loginButtonDisabled,
+              ]}
               onPress={handleLogin}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoginLocked}
               activeOpacity={0.88}
             >
               <LinearGradient

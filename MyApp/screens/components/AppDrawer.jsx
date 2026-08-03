@@ -81,11 +81,6 @@ const ACCOUNT_ITEMS = [
     label: "Account",
     route: "Profile",
   },
-  {
-    icon: "settings-outline",
-    label: "Settings",
-    route: "Settings",
-  },
 ];
 
 export default function AppDrawer({

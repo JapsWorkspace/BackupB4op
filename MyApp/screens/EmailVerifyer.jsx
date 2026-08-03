@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -18,6 +18,9 @@ import useFormAutoScroll from "./hooks/useFormAutoScroll";
 import { sanitizeEmailInput } from "./utils/validation";
 
 const OTP_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 30;
+const RESEND_LOCKOUT_SECONDS = 5 * 60;
+const MAX_RESEND_ATTEMPTS = 5;
 
 export default function EmailVerifyer({ navigation }) {
   const [step, setStep] = useState("identify");
@@ -26,6 +29,9 @@ export default function EmailVerifyer({ navigation }) {
   const [selectedChannel, setSelectedChannel] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendLockout, setResendLockout] = useState(0);
+  const [resendAttempts, setResendAttempts] = useState(0);
   const { scrollRef, registerInput, scrollToInput } = useFormAutoScroll(36);
   const otpInputRef = useRef(null);
 
@@ -33,6 +39,34 @@ export default function EmailVerifyer({ navigation }) {
     () => (Array.isArray(lookupResult?.options) ? lookupResult.options : []),
     [lookupResult]
   );
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+
+    const timerId = setInterval(() => {
+      setResendCooldown((value) => Math.max(0, value - 1));
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [resendCooldown]);
+
+  useEffect(() => {
+    if (resendLockout <= 0) return undefined;
+
+    const timerId = setInterval(() => {
+      setResendLockout((value) => {
+        const nextValue = Math.max(0, value - 1);
+
+        if (nextValue <= 0) {
+          setResendAttempts(0);
+        }
+
+        return nextValue;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [resendLockout]);
 
   const lookupAccount = async () => {
     const cleanIdentifier = sanitizeEmailInput(identifier);
@@ -66,8 +100,33 @@ export default function EmailVerifyer({ navigation }) {
     }
   };
 
-  const sendOtp = async (channel) => {
+  const formatLockoutTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const sendOtp = async (channel, options = {}) => {
     if (!lookupResult?.userId || !channel) return;
+
+    if (options.resend && resendLockout > 0) {
+      Alert.alert(
+        "Please wait",
+        `Please wait ${formatLockoutTime(resendLockout)} before resending OTP.`
+      );
+      return;
+    }
+
+    if (options.resend && resendCooldown > 0) {
+      return;
+    }
+
+    if (options.resend && resendAttempts >= MAX_RESEND_ATTEMPTS - 1) {
+      setResendCooldown(0);
+      setResendLockout(RESEND_LOCKOUT_SECONDS);
+      Alert.alert("Please wait", "Please wait before resending OTP.");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -77,6 +136,13 @@ export default function EmailVerifyer({ navigation }) {
       });
       setSelectedChannel(channel);
       setOtp("");
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      if (options.resend) {
+        setResendAttempts((value) => value + 1);
+      } else {
+        setResendAttempts(0);
+        setResendLockout(0);
+      }
       setStep("otp");
       requestAnimationFrame(() => otpInputRef.current?.focus?.());
     } catch (err) {
@@ -90,8 +156,15 @@ export default function EmailVerifyer({ navigation }) {
   };
 
   const verifyOtp = async () => {
-    if (!lookupResult?.userId || !selectedChannel || !/^\d{6}$/.test(otp)) {
-      Alert.alert("Invalid code", "Please enter the full 6-digit OTP.");
+    if (!lookupResult?.userId || !selectedChannel) return;
+
+    if (!String(otp || "").trim()) {
+      Alert.alert("Invalid code", "OTP cannot be empty");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      Alert.alert("Invalid code", "Please enter the complete 6-digit OTP.");
       return;
     }
 
@@ -111,10 +184,7 @@ export default function EmailVerifyer({ navigation }) {
         email: identifier,
       });
     } catch (err) {
-      Alert.alert(
-        "Verification failed",
-        err.response?.data?.message || "Invalid or expired OTP."
-      );
+      Alert.alert("Verification failed", "Incorrect OTP try again");
     } finally {
       setLoading(false);
     }
@@ -219,18 +289,38 @@ export default function EmailVerifyer({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.button,
-                    (loading || otp.length !== OTP_LENGTH) && styles.buttonDisabled,
+                    loading && styles.buttonDisabled,
                   ]}
                   onPress={verifyOtp}
-                  disabled={loading || otp.length !== OTP_LENGTH}
+                  disabled={loading}
                 >
                   <Text style={styles.buttonText}>
                     {loading ? "Verifying..." : "Verify OTP"}
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.linkButton} onPress={() => sendOtp(selectedChannel)}>
-                  <Text style={styles.linkButtonText}>Resend code</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.linkButton,
+                    (loading || resendCooldown > 0 || resendLockout > 0) &&
+                      styles.linkButtonDisabled,
+                  ]}
+                  onPress={() => sendOtp(selectedChannel, { resend: true })}
+                  disabled={loading || resendCooldown > 0 || resendLockout > 0}
+                >
+                  <Text
+                    style={[
+                      styles.linkButtonText,
+                      (loading || resendCooldown > 0 || resendLockout > 0) &&
+                        styles.linkButtonTextDisabled,
+                    ]}
+                  >
+                    {resendLockout > 0
+                      ? `Please wait ${formatLockoutTime(resendLockout)} before resending OTP`
+                      : resendCooldown > 0
+                        ? `Resend available in ${resendCooldown}s`
+                        : "Resend code"}
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -346,8 +436,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 8,
   },
+  linkButtonDisabled: {
+    opacity: 0.62,
+  },
   linkButtonText: {
     color: "#14532D",
     fontWeight: "900",
+  },
+  linkButtonTextDisabled: {
+    color: "#7b867f",
   },
 });

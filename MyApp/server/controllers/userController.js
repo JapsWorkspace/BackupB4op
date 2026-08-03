@@ -601,6 +601,14 @@ function getPublishedNotificationTime(item) {
   return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
+function getUserNotificationStartDate(user) {
+  const dates = [user?.createdAt, user?.notificationClearedAt]
+    .map((value) => (value ? new Date(value) : null))
+    .filter((date) => date && !Number.isNaN(date.getTime()));
+
+  return dates.length ? new Date(Math.max(...dates.map((date) => date.getTime()))) : null;
+}
+
 function getUserActionArchiveFilter(userObjectId, userIdText) {
   return {
     $or: [
@@ -634,9 +642,7 @@ function mergeNotifications(notifications) {
 }
 
 async function syncRecentGuidelineNotificationsForUser(user) {
-  const clearedAt = user.notificationClearedAt
-    ? new Date(user.notificationClearedAt)
-    : null;
+  const visibleFrom = getUserNotificationStartDate(user);
 
   const existingDedupeKeys = new Set([
     ...(user.notifications || [])
@@ -676,10 +682,10 @@ async function syncRecentGuidelineNotificationsForUser(user) {
         return false;
       }
 
-      if (clearedAt) {
+      if (visibleFrom) {
         const publishedTime = getPublishedNotificationTime(guideline);
 
-        if (publishedTime && publishedTime <= clearedAt) {
+        if (publishedTime && publishedTime < visibleFrom) {
           skippedBeforeClear += 1;
           return false;
         }
@@ -714,9 +720,7 @@ async function syncRecentGuidelineNotificationsForUser(user) {
   return user;
 }
 async function syncRecentAnnouncementNotificationsForUser(user) {
-  const clearedAt = user.notificationClearedAt
-    ? new Date(user.notificationClearedAt)
-    : null;
+  const visibleFrom = getUserNotificationStartDate(user);
 
   const existingDedupeKeys = new Set([
     ...(user.notifications || [])
@@ -756,10 +760,10 @@ async function syncRecentAnnouncementNotificationsForUser(user) {
         return false;
       }
 
-      if (clearedAt) {
+      if (visibleFrom) {
         const publishedTime = getPublishedNotificationTime(announcement);
 
-        if (publishedTime && publishedTime <= clearedAt) {
+        if (publishedTime && publishedTime < visibleFrom) {
           skippedBeforeClear += 1;
           return false;
         }
@@ -895,32 +899,11 @@ const registerUser = async (req, res) => {
 
     generateVerificationToken(newUser);
 
-    const { otp } = await setOtpFields(newUser, {
-      purpose: "registration_phone",
-      channel: "sms",
-      skipCooldown: true,
-    });
-
     const user = await newUser.save();
 
-    let smsSent = false;
-
-    try {
-      await deliverOtp(user, { channel: "sms", otp, purpose: "registration_phone" });
-      smsSent = true;
-    } catch (smsErr) {
-      console.error("[otp sms sending failed]", {
-        userId: String(user._id),
-        message: smsErr?.message || String(smsErr),
-      });
-    }
-
     return res.status(201).json({
-      message: smsSent
-        ? "Registration successful. Please verify your phone number."
-        : "Registration successful, but SMS OTP could not be sent yet.",
-      smsSent,
-      nextStep: "verify_phone",
+      message: "Registration successful. Choose where you want to receive your OTP.",
+      nextStep: "choose_otp_channel",
       userId: user._id,
       phoneMasked: maskPhone(user.phoneNumber || user.phone),
       emailMasked: maskEmail(user.email),
@@ -1206,6 +1189,25 @@ const updateUser = async (req, res) => {
     }
 
     if (body.password) {
+      const cleanCurrentPassword = String(body.currentPassword || "").trim();
+
+      if (!cleanCurrentPassword) {
+        return res.status(400).json({
+          message: "Missing Field",
+        });
+      }
+
+      const isCurrentPasswordValid = await bcrypt.compare(
+        cleanCurrentPassword,
+        existingUser.password
+      );
+
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({
+          message: "Password is incorrect",
+        });
+      }
+
       const passwordError = getPasswordPolicyError(body.password);
       if (passwordError) {
         return res.status(400).json({
@@ -1989,7 +1991,7 @@ const getUserById = async (req, res) => {
 const getUserNotifications = async (req, res) => {
   try {
     const user = await UserModel.findById(req.params.id).select(
-      "notifications notificationClearedAt clearedNotificationDedupeKeys"
+      "notifications notificationClearedAt clearedNotificationDedupeKeys createdAt"
     );
 
     if (!user) {
@@ -2006,18 +2008,22 @@ const getUserNotifications = async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(String(user._id));
     const userIdText = String(userObjectId);
 
+    const visibleFrom = getUserNotificationStartDate(user);
+    const broadcastNotificationQuery = {
+      recipientRole: "all",
+      recipientUser: null,
+      recipientBarangay: null,
+      recipientBarangayName: "",
+      ...(visibleFrom ? { createdAt: { $gte: visibleFrom } } : {}),
+    };
+
     const collectionNotifications = await Notification.find({
       $and: [
         {
           $or: [
             { recipientUser: userObjectId },
             { recipientUser: req.params.id },
-            {
-              recipientRole: "all",
-              recipientUser: null,
-              recipientBarangay: null,
-              recipientBarangayName: "",
-            },
+            broadcastNotificationQuery,
           ],
         },
         {

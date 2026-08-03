@@ -72,7 +72,7 @@ export default function AppTopBar({
           <View style={[styles.searchWrap, themed.floatingSurface]}>
             <Ionicons name="search-outline" size={17} color={theme.subtext} />
             <TextInput
-              placeholder="Search place in Jaen"
+              placeholder="Search evacuation place"
               style={[styles.search, { color: theme.text }]}
               value={value}
               onChangeText={handleChangeText}
@@ -122,7 +122,7 @@ export default function AppTopBar({
                 </Text>
 
                 {item.source === "evacuation" && (
-                  <Text style={[styles.badge, { color: theme.primary }]}>EVAC CENTER</Text>
+                  <Text style={[styles.badge, { color: theme.primary }]}>EVAC PLACE</Text>
                 )}
               </TouchableOpacity>
             )}

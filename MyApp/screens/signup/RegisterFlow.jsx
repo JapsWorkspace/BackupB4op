@@ -61,6 +61,7 @@ export default function RegisterFlow() {
   const [emailMasked, setEmailMasked] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpChannelLoading, setOtpChannelLoading] = useState("");
   const [isEmailActionLoading, setIsEmailActionLoading] = useState(false);
   const [smsCooldown, setSmsCooldown] = useState(0);
   const [emailCooldown, setEmailCooldown] = useState(0);
@@ -181,13 +182,18 @@ export default function RegisterFlow() {
     }
 
     if (verificationStep === "email_notice") {
-      setVerificationStep("phone");
+      setVerificationStep("choose_channel");
       return;
     }
 
-    if (verificationStep === "phone") {
+    if (
+      verificationStep === "choose_channel" ||
+      verificationStep === "phone" ||
+      verificationStep === "email"
+    ) {
+      setOtpCode("");
       setVerificationStep("form");
-      goToStep(REGISTRATION_STEPS.SECURITY);
+      goToStep(REGISTRATION_STEPS.MOBILE);
       return;
     }
 
@@ -256,15 +262,14 @@ export default function RegisterFlow() {
       setRegisteredUserId(result?.userId || "");
       setPhoneMasked(result?.phoneMasked || mobileData.phone);
       setEmailMasked(result?.emailMasked || mobileData.email);
-      setVerificationStep("phone");
+      setVerificationStep("choose_channel");
       setOtpCode("");
-      setSmsCooldown(60);
+      setSmsCooldown(0);
+      setEmailCooldown(0);
 
       setModalMessage(
         result?.message ||
-          (result?.smsSent === false
-            ? "Registration successful, but SMS OTP could not be sent yet."
-            : "Registration successful! Please verify your phone number.")
+          "Registration successful. Choose where you want to receive your OTP."
       );
       setShowModal(true);
     } catch (err) {
@@ -297,6 +302,48 @@ export default function RegisterFlow() {
     }
   };
 
+  const startRegistrationOtp = async (channel) => {
+    if (!registeredUserId || otpChannelLoading) return;
+
+    const nextStep = channel === "sms" ? "phone" : "email";
+    const purpose = channel === "sms" ? "registration_phone" : "registration_email";
+
+    try {
+      setOtpChannelLoading(channel);
+      setOtpCode("");
+
+      await api.post("/user/send-otp", {
+        userId: registeredUserId,
+        channel,
+        purpose,
+      });
+
+      setVerificationStep(nextStep);
+
+      if (channel === "sms") {
+        setSmsCooldown(60);
+      } else {
+        setEmailCooldown(60);
+      }
+
+      setModalMessage(
+        channel === "sms"
+          ? "OTP sent to your mobile number."
+          : "OTP sent to your email address."
+      );
+      setShowModal(true);
+    } catch (err) {
+      setModalMessage(
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Unable to send OTP. Please try again."
+      );
+      setShowModal(true);
+    } finally {
+      setOtpChannelLoading("");
+    }
+  };
+
   const verifyRegistrationOtp = async () => {
     if (!registeredUserId || !/^\d{6}$/.test(otpCode)) {
       setModalMessage("Please enter the full 6-digit OTP.");
@@ -323,6 +370,28 @@ export default function RegisterFlow() {
         setEmailMasked(result?.emailMasked || emailMasked);
         setVerificationStep("email_notice");
         setModalMessage(result?.message || "Phone verified. Verification email sent.");
+        setShowModal(true);
+        return;
+      }
+
+      if (result?.nextStep === "verify_phone") {
+        setVerificationStep("phone");
+
+        try {
+          await api.post("/user/send-otp", {
+            userId: registeredUserId,
+            channel: "sms",
+            purpose: "registration_phone",
+          });
+          setSmsCooldown(60);
+          setModalMessage("Email verified. We sent an OTP to your mobile number.");
+        } catch (sendErr) {
+          setModalMessage(
+            sendErr?.response?.data?.message ||
+              "Email verified. Please tap resend to send your mobile OTP."
+          );
+        }
+
         setShowModal(true);
         return;
       }
@@ -380,7 +449,11 @@ export default function RegisterFlow() {
         purpose,
       });
 
-      if (channel === "sms") setSmsCooldown(60);
+      if (channel === "sms") {
+        setSmsCooldown(60);
+      } else {
+        setEmailCooldown(60);
+      }
       setModalMessage("A new verification code has been sent.");
       setShowModal(true);
     } catch (err) {
@@ -403,6 +476,63 @@ export default function RegisterFlow() {
   };
 
   const renderVerificationPanel = () => {
+    if (verificationStep === "choose_channel") {
+      return (
+        <View style={styles.verificationWrap}>
+          <RegistrationStepIndicator currentStep={1} />
+          <View style={styles.verificationCard}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="shield-checkmark-outline" size={34} color="#166534" />
+            </View>
+            <Text style={styles.verifyTitle}>Choose OTP Method</Text>
+            <Text style={styles.verifyText}>
+              Select where you want to receive your 6-digit verification code first.
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.channelButton,
+                otpChannelLoading === "sms" && styles.disabledButton,
+              ]}
+              disabled={!!otpChannelLoading}
+              onPress={() => startRegistrationOtp("sms")}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color="#166534" />
+              <View style={styles.channelCopy}>
+                <Text style={styles.channelTitle}>Send via SMS</Text>
+                <Text style={styles.channelMeta}>{phoneMasked || "Registered mobile number"}</Text>
+              </View>
+              {otpChannelLoading === "sms" ? (
+                <ActivityIndicator size="small" color="#166534" />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color="#166534" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.channelButton,
+                otpChannelLoading === "email" && styles.disabledButton,
+              ]}
+              disabled={!!otpChannelLoading}
+              onPress={() => startRegistrationOtp("email")}
+            >
+              <Ionicons name="mail-outline" size={20} color="#166534" />
+              <View style={styles.channelCopy}>
+                <Text style={styles.channelTitle}>Send via Email</Text>
+                <Text style={styles.channelMeta}>{emailMasked || "Registered email address"}</Text>
+              </View>
+              {otpChannelLoading === "email" ? (
+                <ActivityIndicator size="small" color="#166534" />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color="#166534" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
     if (verificationStep === "success") {
       return (
         <View style={styles.verificationWrap}>
@@ -477,7 +607,9 @@ export default function RegisterFlow() {
           </View>
           <Text style={styles.otpTitle}>Almost there</Text>
           <Text style={styles.otpInstruction}>
-            Please enter the 6-digit code sent to your mobile number for verification.
+            {verificationStep === "email"
+              ? "Please enter the 6-digit code sent to your email address for verification."
+              : "Please enter the 6-digit code sent to your mobile number for verification."}
           </Text>
           <Text style={styles.otpSubtext}>This code will expire in 5 minutes.</Text>
 
@@ -520,11 +652,26 @@ export default function RegisterFlow() {
           </TouchableOpacity>
 
           <Text style={styles.otpTimer}>
-            {smsCooldown > 0 ? `Request new code in 00:${String(smsCooldown).padStart(2, "0")}s` : "You can request a new code now."}
+            {verificationStep === "email"
+              ? emailCooldown > 0
+                ? `Request new code in 00:${String(emailCooldown).padStart(2, "0")}s`
+                : "You can request a new code now."
+              : smsCooldown > 0
+                ? `Request new code in 00:${String(smsCooldown).padStart(2, "0")}s`
+                : "You can request a new code now."}
           </Text>
 
-          <TouchableOpacity onPress={resendRegistrationOtp} disabled={smsCooldown > 0}>
-            <Text style={[styles.otpResend, smsCooldown > 0 && styles.disabledLinkText]}>
+          <TouchableOpacity
+            onPress={resendRegistrationOtp}
+            disabled={verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0}
+          >
+            <Text
+              style={[
+                styles.otpResend,
+                (verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0) &&
+                  styles.disabledLinkText,
+              ]}
+            >
               Didn't receive any code? Resend Again
             </Text>
           </TouchableOpacity>
@@ -804,6 +951,38 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 5,
+  },
+
+  channelButton: {
+    width: "100%",
+    minHeight: 66,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#DDEBE4",
+    backgroundColor: "#F8FBF9",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  channelCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  channelTitle: {
+    color: "#10251B",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  channelMeta: {
+    marginTop: 2,
+    color: "#647067",
+    fontSize: 12,
+    fontWeight: "700",
   },
   otpHeroCircle: {
     width: 76,

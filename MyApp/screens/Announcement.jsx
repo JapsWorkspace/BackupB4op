@@ -336,7 +336,7 @@ export default function AnnouncementScreen({ navigation, route }) {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={22} color={theme.text} />
+          <Ionicons name="chevron-back" size={21} color={theme.primary} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>Announcements</Text>
@@ -762,27 +762,29 @@ function makeStyles(theme) {
     headerRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 12,
-      marginBottom: 14,
-      paddingHorizontal: 18,
+      marginBottom: 16,
+      paddingHorizontal: 16,
     },
     backButton: {
       width: 42,
       height: 42,
-      borderRadius: 21,
+      borderRadius: 14,
       backgroundColor: theme.surface,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginRight: 12,
     },
     headerCopy: {
       flex: 1,
-      paddingRight: 54,
+      minWidth: 0,
     },
     headerTitle: {
       color: theme.text,
-      fontSize: 17,
+      fontSize: 24,
       fontWeight: "900",
-      textAlign: "center",
+      textAlign: "left",
     },
     headerSubtitle: {
       marginTop: 3,
@@ -853,7 +855,7 @@ function makeStyles(theme) {
       flexDirection: "row",
       alignItems: "center",
       gap: 9,
-      marginHorizontal: 18,
+      marginHorizontal: 16,
       marginBottom: 10,
     },
     searchInput: {
@@ -867,7 +869,7 @@ function makeStyles(theme) {
       backgroundColor: theme.card,
       borderWidth: 1,
       borderColor: theme.border,
-      marginHorizontal: 18,
+      marginHorizontal: 16,
       marginBottom: 10,
       overflow: "hidden",
     },
@@ -888,7 +890,7 @@ function makeStyles(theme) {
       gap: 8,
       marginBottom: 14,
       flexWrap: "wrap",
-      paddingHorizontal: 18,
+      paddingHorizontal: 16,
     },
     chip: {
       minHeight: 34,
@@ -1172,7 +1174,7 @@ function makeStyles(theme) {
       alignItems: "center",
       justifyContent: "center",
       paddingVertical: 42,
-      paddingHorizontal: 18,
+      paddingHorizontal: 16,
     },
     emptyTitle: {
       marginTop: 12,
@@ -1195,7 +1197,7 @@ function makeStyles(theme) {
     modalBox: {
       flex: 1,
       backgroundColor: theme.background,
-      paddingHorizontal: 18,
+      paddingHorizontal: 16,
       paddingTop: 28,
     },
     modalHeader: {

@@ -13,6 +13,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { UserContext } from "./UserContext";
 import { useTheme } from "./contexts/ThemeContext";
@@ -138,12 +139,17 @@ export default function Profile({ navigation }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.dashboardHeader, { backgroundColor: theme.primary }] }>
+      <LinearGradient
+        colors={["#86EFAC", "#16A34A", "#065F46"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.dashboardHeader}
+      >
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.headerIconButton} onPress={openDrawer}>
             <Ionicons name="menu" size={23} color={theme.buttonText} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.buttonText }]}>ACCOUNT</Text>
+          <Text style={styles.headerTitle}>Account</Text>
           <TouchableOpacity style={styles.headerIconButton} onPress={openNotifications}>
             <Ionicons name="notifications-outline" size={22} color={theme.buttonText} />
             {unreadCount > 0 ? (
@@ -155,7 +161,7 @@ export default function Profile({ navigation }) {
             ) : null}
           </TouchableOpacity>
         </View>
-      </View>
+      </LinearGradient>
 
       <View style={[styles.profileCard, themed.card]}>
         <TouchableOpacity
@@ -201,6 +207,13 @@ export default function Profile({ navigation }) {
           title="Safety Status"
           subtitle={statusLabel}
           statusColor={isSafe ? theme.primary : theme.danger}
+        />
+        <GridTile
+          theme={theme}
+          icon="settings-outline"
+          title="Settings"
+          subtitle="App preferences"
+          onPress={() => navigation.navigate("Settings")}
         />
         <GridTile
           theme={theme}
@@ -286,8 +299,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: "center",
-    fontSize: 15,
+    fontSize: 22,
     fontWeight: "900",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(6, 78, 59, 0.28)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   profileCard: {
     alignItems: "center",

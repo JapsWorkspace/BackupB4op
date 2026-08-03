@@ -98,8 +98,8 @@ export default function PasswordSecurity({ navigation }) {
       return;
     }
 
-    if (!cleanCurrentPassword) {
-      setSubmitError("Current password is required.");
+    if (!cleanCurrentPassword || !newPassword || !confirmPassword) {
+      setSubmitError("Missing Field");
       return;
     }
 
@@ -107,11 +107,6 @@ export default function PasswordSecurity({ navigation }) {
     if (passwordError) {
       setNewPasswordError(passwordError);
       setSubmitError("Please fix the password errors first.");
-      return;
-    }
-
-    if (!newPassword || !confirmPassword) {
-      setSubmitError("Password fields cannot be empty.");
       return;
     }
 
@@ -132,6 +127,7 @@ export default function PasswordSecurity({ navigation }) {
       setIsSaving(true);
 
       const response = await api.put(`/user/update/${userId}`, {
+        currentPassword: cleanCurrentPassword,
         password: newPassword,
       });
 

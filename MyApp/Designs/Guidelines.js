@@ -46,27 +46,29 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
-    paddingHorizontal: 18,
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
   backBtn: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: 14,
     backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
     marginRight: 12,
   },
   headerCopy: {
     flex: 1,
-    paddingRight: 54,
+    minWidth: 0,
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: 24,
     fontWeight: "900",
     color: COLORS.text,
-    textAlign: "center",
+    textAlign: "left",
   },
   headerSub: {
     marginTop: 3,
@@ -143,7 +145,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    marginHorizontal: 18,
+    marginHorizontal: 16,
     marginBottom: 12,
   },
   searchInput: {
@@ -158,7 +160,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 16,
-    marginHorizontal: 18,
+    marginHorizontal: 16,
     marginBottom: 12,
     overflow: "hidden",
   },
@@ -177,7 +179,7 @@ const styles = StyleSheet.create({
   },
   filterBlock: {
     marginBottom: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   filterTitle: {
     color: COLORS.text,
@@ -196,7 +198,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginBottom: 16,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   chip: {
     paddingVertical: 8,
@@ -313,7 +315,7 @@ const styles = StyleSheet.create({
     maxWidth: 430,
     alignSelf: "center",
     backgroundColor: COLORS.bg,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 28,
   },
   modalHeader: {

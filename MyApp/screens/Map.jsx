@@ -169,11 +169,15 @@ function getIncidentImages(incident) {
 }
 
 function getHeatStyle(count, maxCount, selected) {
-  if (!count || !maxCount) {
+  const safeCount = Number(count || 0);
+  const safeMax = Math.max(Number(maxCount || 0), 1);
+
+  if (safeCount <= 0) {
     return {
-      strokeColor: selected ? "#FACC15" : null,
-      fillColor: null,
-      strokeWidth: selected ? 3.5 : 1.65,
+      strokeColor: selected ? "#FACC15" : "#16A34A",
+      fillColor: "rgba(34, 197, 94, 0.14)",
+      glowRgb: "34, 197, 94",
+      strokeWidth: selected ? 3.5 : 1.75,
       glowWidth: 0,
       glowAlpha: 0,
       fillPulseAlpha: 0,
@@ -181,23 +185,60 @@ function getHeatStyle(count, maxCount, selected) {
     };
   }
 
-  const ratio = Math.min(1, count / Math.max(maxCount, 1));
-  const thresholdBoost = count >= 6 ? 1 : count >= 3 ? 0.72 : 0.38;
-  const intensity = Math.max(ratio, thresholdBoost);
-  const alpha = count >= 6 ? 0.62 : count >= 3 ? 0.42 : 0.24;
-  const green = Math.round(210 - intensity * 190);
-  const blue = Math.round(190 - intensity * 175);
-  const red = Math.round(210 + intensity * 45);
-  const strokeColor = count >= 6 || ratio >= 1 ? "#FF1F1F" : `rgb(${red}, ${green}, ${blue})`;
+  const ratio = Math.min(1, safeCount / safeMax);
+  const level =
+    safeCount >= 6 || ratio >= 0.86
+      ? "critical"
+      : safeCount >= 4 || ratio >= 0.62
+        ? "high"
+        : safeCount >= 2 || ratio >= 0.34
+          ? "medium"
+          : "low";
+
+  const palette = {
+    low: {
+      strokeColor: "#EAB308",
+      fillColor: "rgba(250, 204, 21, 0.28)",
+      glowRgb: "250, 204, 21",
+      strokeWidth: 2.2,
+      glowWidth: 5,
+      glowAlpha: 0.38,
+      fillPulseAlpha: 0.07,
+    },
+    medium: {
+      strokeColor: "#F97316",
+      fillColor: "rgba(249, 115, 22, 0.36)",
+      glowRgb: "249, 115, 22",
+      strokeWidth: 2.75,
+      glowWidth: 8,
+      glowAlpha: 0.6,
+      fillPulseAlpha: 0.1,
+    },
+    high: {
+      strokeColor: "#EA580C",
+      fillColor: "rgba(234, 88, 12, 0.44)",
+      glowRgb: "234, 88, 12",
+      strokeWidth: 3.1,
+      glowWidth: 10,
+      glowAlpha: 0.76,
+      fillPulseAlpha: 0.13,
+    },
+    critical: {
+      strokeColor: "#EF4444",
+      fillColor: "rgba(239, 68, 68, 0.54)",
+      glowRgb: "255, 31, 31",
+      strokeWidth: 3.5,
+      glowWidth: 12,
+      glowAlpha: 0.92,
+      fillPulseAlpha: 0.16,
+    },
+  }[level];
 
   return {
-    strokeColor: selected ? "#FACC15" : strokeColor,
-    fillColor: `rgba(${red}, ${green}, ${blue}, ${alpha})`,
-    strokeWidth: selected ? 3.5 : count >= 6 ? 3.5 : count >= 3 ? 2.75 : 2.1,
-    glowWidth: count >= 6 ? 11 : count >= 3 ? 8 : 5,
-    glowAlpha: count >= 6 ? 0.92 : count >= 3 ? 0.66 : 0.38,
-    fillPulseAlpha: count >= 6 ? 0.16 : count >= 3 ? 0.11 : 0.07,
-    glow: count > 0,
+    ...palette,
+    strokeColor: selected ? "#FACC15" : palette.strokeColor,
+    strokeWidth: selected ? 3.5 : palette.strokeWidth,
+    glow: true,
   };
 }
 
@@ -1858,6 +1899,7 @@ const [mapWeather, setMapWeather] = useState(null);
 const [fogPulseLevel, setFogPulseLevel] = useState(0.65);
 const [heatPulseLevel, setHeatPulseLevel] = useState(0.45);
 const [selectedBarangay, setSelectedBarangay] = useState(null);
+const [selectedBarangayIds, setSelectedBarangayIds] = useState([]);
 const [showIncidentMarkers, setShowIncidentMarkers] = useState(false);
 const [showBarangayMarkers, setShowBarangayMarkers] = useState(false);
 const [incidentDebugMode, setIncidentDebugMode] = useState(false);
@@ -2058,7 +2100,7 @@ const {
     setRoutes,
   ]);
 
-  const showHomepageBarangays = !activeModule || isIncident || isEvac;
+  const showHomepageBarangays = !activeModule || isIncident || isEvac || isBarangay;
   const showBarangayNameMarkers =
     showBarangayMarkers && (showHomepageBarangays || isBarangay || isEvac);
 
@@ -2740,10 +2782,27 @@ const homepageBarangays = useMemo(() => {
         mainRing,
         color: getBarangayOutlineColor(index, totalFeatures),
         fillColor: getBarangaySoftFillColor(index, totalFeatures),
+        selectedFillColor: getBarangayFillColor(index, totalFeatures),
       };
     })
     .filter(Boolean);
 }, [mongoBarangays]);
+
+const hazardBarangayOutlines = useMemo(() => {
+  if (!isFlood && !isEarthquake) return null;
+
+  return homepageBarangays.map((barangay) => (
+    <Polygon
+      key={`hazard-brgy-outline-${barangay.id}`}
+      coordinates={barangay.mainRing}
+      strokeColor="rgba(17, 24, 39, 0.88)"
+      strokeWidth={1.6}
+      fillColor="rgba(0,0,0,0)"
+      tappable={false}
+      zIndex={95}
+    />
+  ));
+}, [homepageBarangays, isEarthquake, isFlood]);
 
   const incidentBarangayCounts = useMemo(() => {
     const stats = {};
@@ -2955,6 +3014,28 @@ const handleSelectBarangay = useCallback(
   },
   [activeModule, setActiveMapModule, setPanelY]
 );
+
+const selectedBarangayIdSet = useMemo(
+  () => new Set(selectedBarangayIds),
+  [selectedBarangayIds]
+);
+
+const hasBarangayVisibilityFilter = isBarangay && selectedBarangayIds.length > 0;
+
+const toggleBarangayVisibility = useCallback((barangayId) => {
+  if (!barangayId) return;
+
+  setSelectedBarangayIds((prev) =>
+    prev.includes(barangayId)
+      ? prev.filter((id) => id !== barangayId)
+      : [...prev, barangayId]
+  );
+}, []);
+
+const clearBarangayVisibilityFilter = useCallback(() => {
+  setSelectedBarangayIds([]);
+}, []);
+
   const clearSelectedBarangay = useCallback(() => {
     setSelectedBarangay(null);
     mapRef.current?.animateToRegion(JAEN_INITIAL_REGION, 260);
@@ -3773,25 +3854,56 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
        {showHomepageBarangays &&
   homepageBarangays.map((barangay) => {
     const isSelected = selectedBarangay?.id === barangay.id;
-    const allowBarangayPolygonPress = !isIncident && !isEvac;
+    const isVisibilitySelected =
+      isBarangay && selectedBarangayIdSet.has(barangay.id);
+    const isVisibilityMuted = isBarangay && !isVisibilitySelected;
+    const allowBarangayPolygonPress = isBarangay || (!isIncident && !isEvac);
     const reportStats = incidentBarangayCounts[barangay.id] || {};
     const reportCount = Number(reportStats.count || 0);
     const heatStyle = getHeatStyle(reportCount, maxBarangayIncidentCount, isSelected);
-    const strokeColor = heatStyle.strokeColor || barangay.color;
-    const fillColor = heatStyle.fillColor || barangay.fillColor;
+    const strokeColor = isBarangay
+      ? isVisibilityMuted
+        ? "rgba(15, 23, 42, 0.34)"
+        : barangay.color
+      : heatStyle.strokeColor;
+    const fillColor = isBarangay
+      ? isVisibilityMuted
+        ? "rgba(15, 23, 42, 0.22)"
+        : isVisibilitySelected
+          ? barangay.selectedFillColor
+          : barangay.fillColor
+      : heatStyle.fillColor;
+    const strokeWidth = isBarangay
+      ? isVisibilityMuted
+        ? 1
+        : isVisibilitySelected
+          ? 2.6
+          : 1.2
+      : heatStyle.strokeWidth;
 
     return (
       <React.Fragment key={`home-brgy-wrap-${barangay.id}`}>
-        {heatStyle.glow && (
+        {isBarangay && isVisibilitySelected && (
+          <Polygon
+            key={`barangay-filter-glow-${barangay.id}`}
+            coordinates={barangay.mainRing}
+            strokeColor={barangay.color}
+            strokeWidth={5}
+            fillColor="rgba(0,0,0,0)"
+            tappable={false}
+            zIndex={63}
+          />
+        )}
+        {!isBarangay && heatStyle.glow && (
           <Polygon
             key={`home-brgy-glow-${barangay.id}`}
             coordinates={barangay.mainRing}
-            strokeColor={`rgba(255,31,31,${Math.min(
+            strokeColor={`rgba(${heatStyle.glowRgb}, ${Math.min(
               heatStyle.glowAlpha,
               heatPulseLevel
             )})`}
             strokeWidth={heatStyle.glowWidth}
-            fillColor={`rgba(255,31,31,${
+            fillColor={`rgba(${heatStyle.glowRgb}, ${
               0.04 + heatPulseLevel * heatStyle.fillPulseAlpha
             })`}
             tappable={false}
@@ -3802,15 +3914,33 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
           key={`home-brgy-${barangay.id}`}
           coordinates={barangay.mainRing}
           strokeColor={strokeColor}
-          strokeWidth={heatStyle.strokeWidth}
-          fillColor={isSelected ? "rgba(250,204,21,0.16)" : fillColor}
+          strokeWidth={strokeWidth}
+          fillColor={
+            !isBarangay && isSelected ? "rgba(250,204,21,0.16)" : fillColor
+          }
           tappable={allowBarangayPolygonPress}
           onPress={
             allowBarangayPolygonPress
-              ? () => handleSelectBarangay(barangay)
+              ? () => {
+                  if (isBarangay) {
+                    toggleBarangayVisibility(barangay.id);
+                  } else {
+                    handleSelectBarangay(barangay);
+                  }
+                }
               : undefined
           }
-          zIndex={isSelected ? 28 : 18}
+          zIndex={
+            isBarangay
+              ? isVisibilitySelected
+                ? 66
+                : isVisibilityMuted
+                  ? 52
+                  : 56
+              : isSelected
+                ? 28
+                : 18
+          }
         />
       </React.Fragment>
     );
@@ -3818,8 +3948,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
         {jaenBoundary}
         {isFlood && floodLayers}
         {isEarthquake && earthquakeLayer}
-        {isBarangay && mongoBarangayBoundaries}
-        {isBarangay && localBarangayBoundaries}
+        {hazardBarangayOutlines}
 
         {isEvac && userCoordinate && !isNavigating && (
           <SafeMarker key="evac-user" coordinate={userCoordinate} pinColor="#2563eb" />
@@ -3854,36 +3983,59 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
           })}
 {showBarangayNameMarkers &&
   !(isEvac && isNavigating) &&
-  homepageBarangays.map((barangay) => (
-    <SafeMarker
-      key={`home-brgy-label-${barangay.id}`}
-      coordinate={barangay.center}
-      anchor={{ x: 0.5, y: 0.5 }}
-      centerOffset={{ x: 0, y: 0 }}
-      zIndex={selectedBarangay?.id === barangay.id ? 90 : 70}
-      tracksViewChanges={false}
-      onPress={() => {
-        if (!isEvac) {
-          handleSelectBarangay(barangay);
+  homepageBarangays
+    .filter(
+      (barangay) =>
+        !hasBarangayVisibilityFilter || selectedBarangayIdSet.has(barangay.id)
+    )
+    .map((barangay) => (
+      <SafeMarker
+        key={`home-brgy-label-${barangay.id}`}
+        coordinate={barangay.center}
+        anchor={{ x: 0.5, y: 0.5 }}
+        centerOffset={{ x: 0, y: 0 }}
+        zIndex={
+          isBarangay && selectedBarangayIdSet.has(barangay.id)
+            ? 94
+            : selectedBarangay?.id === barangay.id
+              ? 90
+              : 70
         }
-      }}
-    >
-      <BarangayNameMarker
-        label={barangay.label}
-        color={barangay.color}
-        selected={selectedBarangay?.id === barangay.id}
-        incidentCount={isEvac ? 0 : incidentBarangayCounts[barangay.id]?.count || 0}
-        dominantIncidentLabel={
-          isEvac ? "" : incidentBarangayCounts[barangay.id]?.dominantIncidentLabel || ""
-        }
+        tracksViewChanges={false}
         onPress={() => {
-          if (!isEvac) {
+          if (isBarangay) {
+            toggleBarangayVisibility(barangay.id);
+          } else if (!isEvac) {
             handleSelectBarangay(barangay);
           }
         }}
-      />
-    </SafeMarker>
-  ))}
+      >
+        <BarangayNameMarker
+          label={barangay.label}
+          color={
+            isBarangay && selectedBarangayIdSet.has(barangay.id)
+              ? barangay.color
+              : barangay.color
+          }
+          selected={
+            isBarangay
+              ? selectedBarangayIdSet.has(barangay.id)
+              : selectedBarangay?.id === barangay.id
+          }
+          incidentCount={isEvac || isBarangay ? 0 : incidentBarangayCounts[barangay.id]?.count || 0}
+          dominantIncidentLabel={
+            isEvac || isBarangay ? "" : incidentBarangayCounts[barangay.id]?.dominantIncidentLabel || ""
+          }
+          onPress={() => {
+            if (isBarangay) {
+              toggleBarangayVisibility(barangay.id);
+            } else if (!isEvac) {
+              handleSelectBarangay(barangay);
+            }
+          }}
+        />
+      </SafeMarker>
+    ))}
 {shouldShowIncidentMarkers &&
   visibleIncidentMarkers.map((incident, index) => {
     const latitude = Number(incident?.latitude);
@@ -4015,6 +4167,9 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
           onClearSelectedBarangay={clearSelectedBarangay}
           barangayCount={displayedBarangayCount}
           barangayLegend={barangayLegend}
+          selectedBarangayIds={selectedBarangayIds}
+          onToggleBarangayVisibility={toggleBarangayVisibility}
+          onClearBarangayVisibilityFilter={clearBarangayVisibilityFilter}
           evac={normalizedSelectedEvac}
           setEvac={setEvac}
           evacPlaces={normalizedEvacPlaces}
@@ -4096,6 +4251,9 @@ function ModulePanel({
   onClearSelectedBarangay,
   barangayCount,
   barangayLegend,
+  selectedBarangayIds,
+  onToggleBarangayVisibility,
+  onClearBarangayVisibilityFilter,
   evac,
   setEvac,
   evacPlaces,
@@ -4145,6 +4303,19 @@ function ModulePanel({
 }) {
   const [incidentPanelTab, setIncidentPanelTab] = useState("reports");
   const [evacFilter, setEvacFilter] = useState("nearest");
+  const [barangayFilterOpen, setBarangayFilterOpen] = useState(false);
+  const selectedBarangayIdSetForPanel = useMemo(
+    () => new Set(selectedBarangayIds || []),
+    [selectedBarangayIds]
+  );
+  const handlePanelBack = useCallback(() => {
+    if (activeModule === "barangay" && barangayFilterOpen) {
+      setBarangayFilterOpen(false);
+      return;
+    }
+
+    onBack?.();
+  }, [activeModule, barangayFilterOpen, onBack]);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const lastNavigationPanelY = useRef(NAV_PANEL_DEFAULT_OFFSET);
   const isNavigationPanelActiveRef = useRef(false);
@@ -4600,7 +4771,7 @@ function ModulePanel({
             }`
           : `${incidentCount} active reports visible`
       }
-      onBack={onBack}
+      onBack={handlePanelBack}
     />
 
     <View style={[styles.incidentToggleCard, themedOverlay.card]}>
@@ -4990,7 +5161,7 @@ function ModulePanel({
               themedOverlay={themedOverlay}
               title="Flood Map"
               meta="Flood hazard overlay active"
-              onBack={onBack}
+              onBack={handlePanelBack}
             />
             <View style={[styles.panelSection, themedOverlay.section]}>
               <Text style={[styles.sectionLabel, themedOverlay.text]}>Visible layers</Text>
@@ -5030,7 +5201,7 @@ function ModulePanel({
               themedOverlay={themedOverlay}
               title="Earthquake Map"
               meta="Earthquake hazard overlay active"
-              onBack={onBack}
+              onBack={handlePanelBack}
             />
             <View style={[styles.panelSection, themedOverlay.section]}>
               <Text style={[styles.sectionLabel, themedOverlay.text]}>Risk overlay</Text>
@@ -5051,39 +5222,100 @@ function ModulePanel({
               themedOverlay={themedOverlay}
               title="Barangay Map"
               meta={`${barangayCount} barangay boundary records loaded`}
-              onBack={onBack}
+              onBack={handlePanelBack}
             />
             <View style={[styles.panelSection, themedOverlay.section]}>
-              <Text style={[styles.sectionLabel, themedOverlay.text]}>Administrative layers</Text>
-              <LegendRow color="#111827" label="Boundary lines" />
-              <Text style={[styles.panelNote, themedOverlay.subtext]}>
-                Barangay boundaries are shown without incident or hazard clutter
-                for clearer local review.
-              </Text>
+              <View style={styles.barangayFilterHeader}>
+                <View style={styles.barangayFilterTitleBlock}>
+                  <Text style={[styles.sectionLabel, themedOverlay.text]}>Barangay visibility</Text>
+                  <Text style={[styles.panelNote, themedOverlay.subtext]}>
+                    Pick one or more barangays to highlight. Others stay as soft shadow outlines.
+                  </Text>
+                </View>
+                {(selectedBarangayIds || []).length > 0 && (
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    style={styles.barangayClearChip}
+                    onPress={onClearBarangayVisibilityFilter}
+                  >
+                    <Text style={styles.barangayClearChipText}>Show all</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.barangayFilterButton}
+                onPress={() => setBarangayFilterOpen((prev) => !prev)}
+              >
+                <View style={styles.barangayFilterButtonIcon}>
+                  <Ionicons name="layers-outline" size={18} color="#14532D" />
+                </View>
+                <View style={styles.barangayFilterButtonCopy}>
+                  <Text style={styles.barangayFilterButtonTitle}>
+                    {(selectedBarangayIds || []).length
+                      ? `${selectedBarangayIds.length} selected`
+                      : "Choose barangays"}
+                  </Text>
+                  <Text style={styles.barangayFilterButtonMeta}>
+                    Tap outlines or use this list
+                  </Text>
+                </View>
+                <Ionicons
+                  name={barangayFilterOpen ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color="#14532D"
+                />
+              </TouchableOpacity>
+
+              {barangayFilterOpen && (
+                <View style={styles.barangayChoiceGrid}>
+                  {homepageBarangays.map((barangay) => {
+                    const active = selectedBarangayIdSetForPanel.has(barangay.id);
+
+                    return (
+                      <TouchableOpacity
+                        key={`barangay-choice-${barangay.id}`}
+                        activeOpacity={0.86}
+                        style={[
+                          styles.barangayChoiceChip,
+                          active && {
+                            backgroundColor: "#FFFFFF",
+                            borderColor: barangay.color,
+                            borderWidth: 2,
+                          },
+                        ]}
+                        onPress={() => onToggleBarangayVisibility(barangay.id)}
+                      >
+                        <View
+                          style={[
+                            styles.barangayChoiceDot,
+                            { backgroundColor: barangay.color },
+                          ]}
+                        />
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.barangayChoiceText,
+                            active && { color: "#10251B" },
+                          ]}
+                        >
+                          {barangay.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             <View style={[styles.panelSection, themedOverlay.section]}>
-              <Text style={[styles.sectionLabel, themedOverlay.text]}>Barangay color legend</Text>
-              <View style={styles.barangayLegendGrid}>
-                {barangayLegend.slice(0, 18).map((item, index) => (
-                  <View key={`${item.label}-${index}`} style={styles.barangayLegendItem}>
-                    <View
-                      style={[
-                        styles.barangayLegendSwatch,
-                        { backgroundColor: item.color },
-                      ]}
-                    />
-                    <Text style={styles.barangayLegendText} numberOfLines={1}>
-                      {item.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              {barangayLegend.length > 18 && (
-                <Text style={styles.panelNote}>
-                  Showing the first 18 barangay colors. Zoom the map for full boundary labels.
-                </Text>
-              )}
+              <Text style={[styles.sectionLabel, themedOverlay.text]}>Map style</Text>
+              <LegendRow color={homepageBarangays[0]?.color || "#22C55E"} label="Selected barangay uses its assigned color" />
+              <LegendRow color="rgba(15, 23, 42, 0.34)" label="Unselected shadow outline and area" />
+              <Text style={[styles.panelNote, themedOverlay.subtext]}>
+                The map stays zoomed out for Jaen context. Selection changes visibility only.
+              </Text>
             </View>
           </ScrollView>
         )}
@@ -5099,7 +5331,7 @@ function ModulePanel({
                 themedOverlay={themedOverlay}
                 title="Evac Place"
                 meta="Evacuation centers and dynamic pathfinding"
-                onBack={onBack}
+                onBack={handlePanelBack}
               />
             )}
 
@@ -7099,6 +7331,120 @@ barangayIncidentTooltipText: {
     color: "#374151",
     fontSize: 11,
     fontWeight: "800",
+  },
+
+
+  barangayFilterHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  barangayFilterTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  barangayClearChip: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  barangayClearChipText: {
+    color: "#047857",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  barangayFilterButton: {
+    minHeight: 62,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9E8DF",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    gap: 10,
+  },
+
+  barangayFilterButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  barangayFilterButtonCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  barangayFilterButtonTitle: {
+    color: "#10251B",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  barangayFilterButtonMeta: {
+    marginTop: 2,
+    color: "#647067",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  barangayChoiceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  barangayChoiceChip: {
+    width: "48%",
+    minHeight: 40,
+    borderRadius: 14,
+    backgroundColor: "#F8FBF9",
+    borderWidth: 1,
+    borderColor: "#E2ECE6",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
+
+  barangayChoiceChipActive: {
+    backgroundColor: "#14532D",
+    borderColor: "#166534",
+  },
+
+  barangayChoiceDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "rgba(17, 24, 39, 0.16)",
+  },
+
+  barangayChoiceText: {
+    flex: 1,
+    color: "#374151",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  barangayChoiceTextActive: {
+    color: "#FFFFFF",
   },
 
   panelNote: {
