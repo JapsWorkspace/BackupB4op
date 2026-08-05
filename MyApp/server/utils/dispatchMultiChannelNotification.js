@@ -85,7 +85,7 @@ function buildPostSmsMessage({ title, message, fallback }) {
   const cleanTitle = sanitizeText(title, 80).replace(/[.]+$/g, "");
   const cleanMessage = sanitizeText(message, 220);
   const suffix = " Open app for more info.";
-  const prefix = "SagipBayan: ";
+  const prefix = "This is a sample message: ";
   const maxLength = Number(process.env.SMS_MAX_LENGTH || 150);
   let detail = cleanMessage;
 
@@ -129,7 +129,7 @@ function buildSmsMessage(context) {
     if (incident) return buildIncidentSmsMessage(incident);
     const area = cleanBarangay ? ` in Brgy. ${cleanBarangay}` : "";
     const label = cleanIncidentType || "Incident";
-    return trimSmsMessage(`SagipBayan: ${label} alert${area}. Stay alert.`, 150);
+    return trimSmsMessage(`This is a sample message: ${label} alert${area}. Stay alert.`, 150);
   }
 
   if (isClusteredIncidentType(normalizedType)) {
@@ -142,7 +142,7 @@ function buildSmsMessage(context) {
 
   if (isEvacuationType(normalizedType)) {
     return trimSmsMessage(
-      `SagipBayan: Evacuation advisory${cleanBarangay ? ` in Brgy. ${cleanBarangay}` : ""}. ${sanitizeText(message || "Check assigned center and follow MDRRMO instructions.", 90)}`,
+      `This is a sample message: Evacuation advisory${cleanBarangay ? ` in Brgy. ${cleanBarangay}` : ""}. ${sanitizeText(message || "Check assigned center and follow MDRRMO instructions.", 90)}`,
       150
     );
   }
@@ -166,10 +166,10 @@ function buildSmsMessage(context) {
   if (normalizedType.includes("incident") || cleanIncidentType) {
     const area = cleanBarangay ? ` in Brgy. ${cleanBarangay}` : "";
     const label = cleanIncidentType || "Danger";
-    return trimSmsMessage(`SagipBayan: ${label} reported${area}. Avoid the area.`, 150);
+    return trimSmsMessage(`This is a sample message: ${label} reported${area}. Avoid the area.`, 150);
   }
 
-  return trimSmsMessage(`SagipBayan: ${sanitizeText(message || title, 130)}`, 150);
+  return trimSmsMessage(`This is a sample message: ${sanitizeText(message || title, 130)}`, 150);
 }
 
 function buildEmailSubject({ type, title, urgent, barangay }) {

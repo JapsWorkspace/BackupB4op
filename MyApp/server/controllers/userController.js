@@ -139,7 +139,7 @@ function getOtpEmailMessage(user, otp) {
 }
 
 function getOtpSmsMessage(otp) {
-  return `SagipBayan OTP: Your code is ${otp}. It expires in 5 minutes.`;
+  return `This is a sample message: ${otp}`;
 }
 
 function generateVerificationToken(user) {

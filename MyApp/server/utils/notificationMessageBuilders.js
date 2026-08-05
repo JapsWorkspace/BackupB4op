@@ -85,9 +85,6 @@ function buildAnnouncementSms({ title, description, category }) {
   const shortTitle = summarizeForSms(title, 32) || "MDRRMO update";
   const shortDesc = summarizeForSms(description, 70);
 
-  const prefix =
-    cat.toLowerCase() === "emergency" ? "SagipBayan advisory:" : "SagipBayan:";
-
   const fallback =
     cat.toLowerCase() === "weather"
       ? "Stay alert and monitor MDRRMO updates."
@@ -96,8 +93,8 @@ function buildAnnouncementSms({ title, description, category }) {
       : "Open the app for details.";
 
   const message = shortDesc
-    ? `${prefix} ${cat} - ${shortTitle}. ${shortDesc}`
-    : `${prefix} ${cat} - ${shortTitle}. ${fallback}`;
+    ? `This is a sample message: ${cat} - ${shortTitle}. ${shortDesc}`
+    : `This is a sample message: ${cat} - ${shortTitle}. ${fallback}`;
 
   return trimSmsMessage(message, 150);
 }
@@ -118,8 +115,8 @@ function buildGuidelineSms({ title, description, body, content, category }) {
   }
 
   const message = shortDesc
-    ? `SagipBayan: ${cat} guide - ${shortTitle}. ${shortDesc}`
-    : `SagipBayan: ${cat} guide - ${shortTitle}. ${fallback}`;
+    ? `This is a sample message: ${cat} guide - ${shortTitle}. ${shortDesc}`
+    : `This is a sample message: ${cat} guide - ${shortTitle}. ${fallback}`;
 
   return trimSmsMessage(message, 150);
 }
@@ -199,41 +196,41 @@ function buildIncidentSmsMessage(incident) {
 
   if (type.includes("flood")) {
     return trimSmsMessage(
-      `SagipBayan: Flood alert in ${barangay}, around ${location}. Avoid flooded roads.`,
+      `This is a sample message: Flood alert in ${barangay}, around ${location}. Avoid flooded roads.`,
       150
     );
   }
 
   if (type.includes("fire")) {
     return trimSmsMessage(
-      `SagipBayan: Fire reported in ${barangay}, around ${location}. Avoid the area.`,
+      `This is a sample message: Fire reported in ${barangay}, around ${location}. Avoid the area.`,
       150
     );
   }
 
   if (type.includes("earthquake")) {
     return trimSmsMessage(
-      `SagipBayan: Earthquake alert in ${barangay}, around ${location}. Check surroundings.`,
+      `This is a sample message: Earthquake alert in ${barangay}, around ${location}. Check surroundings.`,
       150
     );
   }
 
   if (type.includes("typhoon")) {
     return trimSmsMessage(
-      `SagipBayan: Typhoon alert in ${barangay}. Stay indoors and monitor updates.`,
+      `This is a sample message: Typhoon alert in ${barangay}. Stay indoors and monitor updates.`,
       150
     );
   }
 
   if (type.includes("landslide")) {
     return trimSmsMessage(
-      `SagipBayan: Landslide risk in ${barangay}, around ${location}. Avoid the area.`,
+      `This is a sample message: Landslide risk in ${barangay}, around ${location}. Avoid the area.`,
       150
     );
   }
 
   return trimSmsMessage(
-    `SagipBayan: Incident in ${barangay}, around ${location}. Stay alert.`,
+    `This is a sample message: Incident in ${barangay}, around ${location}. Stay alert.`,
     150
   );
 }
@@ -283,20 +280,20 @@ function buildClusterSmsMessage({ type, barangay, landmark }) {
 
   if (incidentType.includes("flood")) {
     return trimSmsMessage(
-      `SagipBayan: Multiple flood reports near ${barangayLabel}, around ${location}. Avoid flooded roads.`,
+      `This is a sample message: Multiple flood reports near ${barangayLabel}, around ${location}. Avoid flooded roads.`,
       150
     );
   }
 
   if (incidentType.includes("fire")) {
     return trimSmsMessage(
-      `SagipBayan: Multiple fire reports near ${barangayLabel}, around ${location}. Avoid the area.`,
+      `This is a sample message: Multiple fire reports near ${barangayLabel}, around ${location}. Avoid the area.`,
       150
     );
   }
 
   return trimSmsMessage(
-    `SagipBayan: Multiple ${incidentType} reports near ${barangayLabel}, around ${location}. Stay alert.`,
+    `This is a sample message: Multiple ${incidentType} reports near ${barangayLabel}, around ${location}. Stay alert.`,
     150
   );
 }
