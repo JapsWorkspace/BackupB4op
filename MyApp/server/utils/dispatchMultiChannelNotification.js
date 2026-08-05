@@ -390,7 +390,7 @@ async function dispatchSms({ user, context, summary }) {
     notificationId: context.notificationId,
     referenceId: context.referenceId,
     channel: "sms",
-    provider: "unisms",
+    provider: result.provider || process.env.SMS_PROVIDER || "unisms",
     status,
     phone: normalizePhilippinePhoneNumber(phone),
     message: finalMessage,

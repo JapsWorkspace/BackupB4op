@@ -29,9 +29,18 @@ const REGISTRATION_STEPS = {
   SECURITY: 2,
   MOBILE: 3,
 };
+const RESEND_LOCKOUT_SECONDS = 5 * 60;
+const MAX_RESEND_ATTEMPTS = 5;
 
 function buildFullAddress({ barangay, street }) {
   return [street, barangay, "Jaen, Nueva Ecija"].filter(Boolean).join(", ");
+}
+
+function formatLockoutTime(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 export default function RegisterFlow() {
@@ -65,6 +74,8 @@ export default function RegisterFlow() {
   const [isEmailActionLoading, setIsEmailActionLoading] = useState(false);
   const [smsCooldown, setSmsCooldown] = useState(0);
   const [emailCooldown, setEmailCooldown] = useState(0);
+  const [resendLockout, setResendLockout] = useState(0);
+  const [resendAttempts, setResendAttempts] = useState(0);
   const [emailPollingMessage, setEmailPollingMessage] = useState("");
   const otpRefs = useRef([]);
 
@@ -95,6 +106,22 @@ export default function RegisterFlow() {
 
     return () => clearInterval(timer);
   }, [emailCooldown]);
+
+  useEffect(() => {
+    if (resendLockout <= 0) return undefined;
+
+    const timer = setInterval(() => {
+      setResendLockout((value) => {
+        const next = Math.max(0, value - 1);
+        if (next === 0) {
+          setResendAttempts(0);
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [resendLockout]);
 
   useEffect(() => {
     if (verificationStep !== "email_notice" || !registeredUserId) return undefined;
@@ -325,6 +352,8 @@ export default function RegisterFlow() {
       } else {
         setEmailCooldown(60);
       }
+      setResendAttempts(0);
+      setResendLockout(0);
 
       setModalMessage(
         channel === "sms"
@@ -345,7 +374,15 @@ export default function RegisterFlow() {
   };
 
   const verifyRegistrationOtp = async () => {
-    if (!registeredUserId || !/^\d{6}$/.test(otpCode)) {
+    if (!registeredUserId) return;
+
+    if (!otpCode) {
+      setModalMessage("OTP cannot be empty");
+      setShowModal(true);
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otpCode)) {
       setModalMessage("Please enter the full 6-digit OTP.");
       setShowModal(true);
       return;
@@ -365,36 +402,6 @@ export default function RegisterFlow() {
       const result = res?.data || {};
 
       setOtpCode("");
-
-      if (verificationStep === "phone") {
-        setEmailMasked(result?.emailMasked || emailMasked);
-        setVerificationStep("email_notice");
-        setModalMessage(result?.message || "Phone verified. Verification email sent.");
-        setShowModal(true);
-        return;
-      }
-
-      if (result?.nextStep === "verify_phone") {
-        setVerificationStep("phone");
-
-        try {
-          await api.post("/user/send-otp", {
-            userId: registeredUserId,
-            channel: "sms",
-            purpose: "registration_phone",
-          });
-          setSmsCooldown(60);
-          setModalMessage("Email verified. We sent an OTP to your mobile number.");
-        } catch (sendErr) {
-          setModalMessage(
-            sendErr?.response?.data?.message ||
-              "Email verified. Please tap resend to send your mobile OTP."
-          );
-        }
-
-        setShowModal(true);
-        return;
-      }
 
       setVerificationStep("success");
       setModalMessage(result?.message || "Account verified successfully.");
@@ -438,8 +445,30 @@ export default function RegisterFlow() {
   const resendRegistrationOtp = async () => {
     if (!registeredUserId) return;
 
+    if (resendLockout > 0) {
+      setModalMessage(
+        `Please wait ${formatLockoutTime(resendLockout)} before resending OTP.`
+      );
+      setShowModal(true);
+      return;
+    }
+
+    const channel = verificationStep === "phone" ? "sms" : "email";
+    const activeCooldown = channel === "sms" ? smsCooldown : emailCooldown;
+
+    if (activeCooldown > 0) return;
+
+    if (resendAttempts >= MAX_RESEND_ATTEMPTS - 1) {
+      setResendAttempts((value) => value + 1);
+      setResendLockout(RESEND_LOCKOUT_SECONDS);
+      setSmsCooldown(0);
+      setEmailCooldown(0);
+      setModalMessage("Please wait before resending OTP.");
+      setShowModal(true);
+      return;
+    }
+
     try {
-      const channel = verificationStep === "phone" ? "sms" : "email";
       const purpose =
         verificationStep === "phone" ? "registration_phone" : "registration_email";
 
@@ -454,6 +483,7 @@ export default function RegisterFlow() {
       } else {
         setEmailCooldown(60);
       }
+      setResendAttempts((value) => value + 1);
       setModalMessage("A new verification code has been sent.");
       setShowModal(true);
     } catch (err) {
@@ -486,7 +516,7 @@ export default function RegisterFlow() {
             </View>
             <Text style={styles.verifyTitle}>Choose OTP Method</Text>
             <Text style={styles.verifyText}>
-              Select where you want to receive your 6-digit verification code first.
+              Select where you want to receive your 6-digit verification code.
             </Text>
 
             <TouchableOpacity
@@ -641,10 +671,10 @@ export default function RegisterFlow() {
           <TouchableOpacity
             style={[
               styles.otpVerifyButton,
-              (isVerifyingOtp || otpCode.length !== 6) && styles.disabledButton,
+              isVerifyingOtp && styles.disabledButton,
             ]}
             onPress={verifyRegistrationOtp}
-            disabled={isVerifyingOtp || otpCode.length !== 6}
+            disabled={isVerifyingOtp}
           >
             <Text style={styles.otpVerifyText}>
               {isVerifyingOtp ? "Verifying..." : "Verify"}
@@ -663,16 +693,22 @@ export default function RegisterFlow() {
 
           <TouchableOpacity
             onPress={resendRegistrationOtp}
-            disabled={verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0}
+            disabled={
+              resendLockout > 0 ||
+              (verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0)
+            }
           >
             <Text
               style={[
                 styles.otpResend,
-                (verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0) &&
+                (resendLockout > 0 ||
+                  (verificationStep === "email" ? emailCooldown > 0 : smsCooldown > 0)) &&
                   styles.disabledLinkText,
               ]}
             >
-              Didn't receive any code? Resend Again
+              {resendLockout > 0
+                ? `Please wait ${formatLockoutTime(resendLockout)} before resending OTP`
+                : "Didn't receive any code? Resend Again"}
             </Text>
           </TouchableOpacity>
 

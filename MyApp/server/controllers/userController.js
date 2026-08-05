@@ -1449,55 +1449,46 @@ const verifyOtp = async (req, res) => {
       user.isPhoneVerified = true;
       user.phoneOtp = "";
       user.phoneOtpExpires = null;
+      user.isVerified = true;
       clearOtpFields(user, "registration_phone");
-      generateVerificationToken(user);
       await user.save();
 
-      let verificationEmailSent = false;
-      try {
-        await sendRegistrationVerificationEmail(user, req);
-        verificationEmailSent = true;
-      } catch (emailErr) {
-        console.error("[registration verification email send failed]", {
-          userId: String(user._id),
-          message: emailErr?.message || String(emailErr),
-          reason: emailErr?.reason || "",
-        });
-      }
-
       console.log("[registration sms otp verified]", { userId: String(user._id) });
+      console.log("[account verified by selected channel]", {
+        userId: String(user._id),
+        channel: "sms",
+      });
 
       response = {
         ...response,
-        message: verificationEmailSent
-          ? "Phone verified. Verification email sent."
-          : "Phone verified. Please tap resend to send your email verification link.",
-        nextStep: "email_notice",
+        message: "Phone verified. Account verified successfully.",
+        nextStep: "complete",
         isPhoneVerified: true,
         isEmailVerified: user.isEmailVerified === true,
-        isVerified: user.isPhoneVerified === true && user.isEmailVerified === true,
-        emailMasked: maskEmail(user.email),
-        verificationEmailSent,
+        isVerified: true,
+        user: safeUserPayload(user),
       };
     } else if (purpose === "registration_email") {
       user.isEmailVerified = true;
       user.emailOtp = "";
       user.emailOtpExpires = null;
-      user.isVerified = user.isPhoneVerified === true && user.isEmailVerified === true;
+      user.isVerified = true;
       clearOtpFields(user, "registration_email");
+      await user.save();
 
       console.log("[registration email verified]", { userId: String(user._id) });
-
-      if (user.isVerified) {
-        console.log("[account fully verified]", { userId: String(user._id) });
-      }
+      console.log("[account verified by selected channel]", {
+        userId: String(user._id),
+        channel: "email",
+      });
 
       response = {
         ...response,
-        message: user.isVerified
-          ? "Account fully verified."
-          : "Email verified. Phone verification is still required.",
-        nextStep: user.isVerified ? "complete" : "verify_phone",
+        message: "Email verified. Account verified successfully.",
+        nextStep: "complete",
+        isPhoneVerified: user.isPhoneVerified === true,
+        isEmailVerified: true,
+        isVerified: true,
         user: safeUserPayload(user),
       };
     } else if (isForgotPasswordPurpose(purpose)) {

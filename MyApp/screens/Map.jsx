@@ -170,9 +170,8 @@ function getIncidentImages(incident) {
 
 function getHeatStyle(count, maxCount, selected) {
   const safeCount = Number(count || 0);
-  const safeMax = Math.max(Number(maxCount || 0), 1);
 
-  if (safeCount <= 0) {
+  if (safeCount < 2) {
     return {
       strokeColor: selected ? "#FACC15" : "#16A34A",
       fillColor: "rgba(34, 197, 94, 0.14)",
@@ -185,15 +184,12 @@ function getHeatStyle(count, maxCount, selected) {
     };
   }
 
-  const ratio = Math.min(1, safeCount / safeMax);
   const level =
-    safeCount >= 6 || ratio >= 0.86
+    safeCount >= 6
       ? "critical"
-      : safeCount >= 4 || ratio >= 0.62
+      : safeCount >= 4
         ? "high"
-        : safeCount >= 2 || ratio >= 0.34
-          ? "medium"
-          : "low";
+        : "medium";
 
   const palette = {
     low: {
@@ -206,13 +202,13 @@ function getHeatStyle(count, maxCount, selected) {
       fillPulseAlpha: 0.07,
     },
     medium: {
-      strokeColor: "#F97316",
-      fillColor: "rgba(249, 115, 22, 0.36)",
-      glowRgb: "249, 115, 22",
+      strokeColor: "#EAB308",
+      fillColor: "rgba(250, 204, 21, 0.3)",
+      glowRgb: "250, 204, 21",
       strokeWidth: 2.75,
       glowWidth: 8,
-      glowAlpha: 0.6,
-      fillPulseAlpha: 0.1,
+      glowAlpha: 0.52,
+      fillPulseAlpha: 0.09,
     },
     high: {
       strokeColor: "#EA580C",
@@ -1529,11 +1525,11 @@ function EvacuationPlaceMarker({ color, selected = false, label, badge = "" }) {
         ]}
       >
         <View style={[styles.evacMarkerCore, { backgroundColor: color }]}>
-          <Ionicons name="business-outline" size={14} color="#ffffff" />
+          <Ionicons name="business" size={17} color="#ffffff" />
         </View>
       </View>
 
-      <View style={[styles.evacMarkerPointer, { borderTopColor: color }]} />
+      <View style={[styles.evacMarkerBaseShadow, { backgroundColor: color }]} />
     </View>
   );
 }function BarangayNameMarker({
@@ -1900,6 +1896,7 @@ const [fogPulseLevel, setFogPulseLevel] = useState(0.65);
 const [heatPulseLevel, setHeatPulseLevel] = useState(0.45);
 const [selectedBarangay, setSelectedBarangay] = useState(null);
 const [selectedBarangayIds, setSelectedBarangayIds] = useState([]);
+const [barangaySpecificMode, setBarangaySpecificMode] = useState(false);
 const [showIncidentMarkers, setShowIncidentMarkers] = useState(false);
 const [showBarangayMarkers, setShowBarangayMarkers] = useState(false);
 const [incidentDebugMode, setIncidentDebugMode] = useState(false);
@@ -3021,6 +3018,7 @@ const selectedBarangayIdSet = useMemo(
 );
 
 const hasBarangayVisibilityFilter = isBarangay && selectedBarangayIds.length > 0;
+const isBarangaySelectionMode = isBarangay && barangaySpecificMode;
 
 const toggleBarangayVisibility = useCallback((barangayId) => {
   if (!barangayId) return;
@@ -3034,10 +3032,13 @@ const toggleBarangayVisibility = useCallback((barangayId) => {
 
 const clearBarangayVisibilityFilter = useCallback(() => {
   setSelectedBarangayIds([]);
+  setBarangaySpecificMode(false);
 }, []);
 
   const clearSelectedBarangay = useCallback(() => {
     setSelectedBarangay(null);
+    setSelectedBarangayIds([]);
+    setBarangaySpecificMode(false);
     mapRef.current?.animateToRegion(JAEN_INITIAL_REGION, 260);
   }, []);
 
@@ -3202,6 +3203,8 @@ const shouldShowIncidentMarkers =
     setPanelState("HIDDEN");
     setPanelY(null);
     setSelectedBarangay(null);
+    setSelectedBarangayIds([]);
+    setBarangaySpecificMode(false);
     if (evacSelectionRecenterTimerRef.current) {
       clearTimeout(evacSelectionRecenterTimerRef.current);
       evacSelectionRecenterTimerRef.current = null;
@@ -3268,14 +3271,10 @@ const shouldShowIncidentMarkers =
 
     if (!isValidCoordinate(latitude, longitude)) return;
 
-    const tappedPoint = { latitude, longitude };
-
-    console.log("[incident map tap]", { latitude, longitude });
-
-    if (!incidentDebugMode && !isPointInsideJaenBoundary(tappedPoint)) {
+    if (!incidentDebugMode) {
       Alert.alert(
-        "Outside Jaen Boundary",
-        "You can only pin and report incidents inside Jaen."
+        "Real Location Required",
+        "Debug Mode OFF uses your phone location. Turn on Debug Mode to choose a test location on the map."
       );
       return;
     }
@@ -3285,6 +3284,12 @@ const shouldShowIncidentMarkers =
       longitude,
       homepageBarangays.map((barangay) => barangay.feature)
     );
+
+    console.log("[incident debug map tap]", {
+      latitude,
+      longitude,
+      insideReportableBarangay: Boolean(matchedFeature),
+    });
     let matchedBarangay = matchedFeature
       ? homepageBarangays.find((barangay) => barangay.feature === matchedFeature)
       : null;
@@ -3460,10 +3465,16 @@ if (!isValidCoordinate(latitude, longitude)) {
   return;
 }
 
-if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
+const currentLocationFeature = findBarangayFeatureByCoordinate(
+  latitude,
+  longitude,
+  homepageBarangays.map((barangay) => barangay.feature)
+);
+
+if (!incidentDebugMode && !currentLocationFeature) {
   Alert.alert(
     "Outside Jaen Boundary",
-    "Your current location is outside Jaen. You can only report incidents inside Jaen."
+    "Reports can only be given inside Jaen"
   );
   return;
 }
@@ -3500,7 +3511,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
     } finally {
       setIncidentLocating(false);
     }
-  }, [incidentDebugMode, incidentLocating]);
+  }, [homepageBarangays, incidentDebugMode, incidentLocating]);
 
   const applyIncidentImages = useCallback((nextImages, replace = false) => {
     const currentImages = replace ? [] : getIncidentImageItems(incidentImage);
@@ -3604,8 +3615,8 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
   const nextErrors = {};
 
   if (!incidentDraft.type || !incidentDraft.level) {
-    if (!incidentDraft.type) nextErrors.type = "Incident type is required.";
-    if (!incidentDraft.level) nextErrors.level = "Severity level is required.";
+    if (!incidentDraft.type) nextErrors.type = "Incident type required";
+    if (!incidentDraft.level) nextErrors.level = "Severity required";
   }
 
   const cleanDistrict = String(incidentDraft.district || "").trim();
@@ -3624,37 +3635,62 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
   });
 
   if (!cleanDistrict) {
-    nextErrors.district = "District is required.";
+    nextErrors.district = "District required";
   }
 
   if (!cleanBarangay) {
-    nextErrors.barangay = "Barangay/location is required.";
+    nextErrors.barangay = "Barangay required";
   }
 
   if (!cleanStreet) {
-    nextErrors.street = "Street, purok, or landmark is required.";
+    nextErrors.street = "Street, Landmark, Detail required";
   }
 
   const hasCoordinates = isValidCoordinate(
     incidentDraft.latitude,
     incidentDraft.longitude
   );
+  const manualAddressBarangay =
+    incidentDebugMode && !hasCoordinates && cleanStreet && cleanBarangay
+      ? homepageBarangays.find(
+          (barangay) =>
+            normalizeBarangayName(barangay.label) === normalizeBarangayName(cleanBarangay) ||
+            normalizeBarangayName(getFeatureBarangayName(barangay.feature)) ===
+              normalizeBarangayName(cleanBarangay)
+        )
+      : null;
+  const manualAddressCoordinate = toMarkerCoordinate(manualAddressBarangay?.center);
+  const resolvedIncidentLatitude = hasCoordinates
+    ? incidentDraft.latitude
+    : manualAddressCoordinate?.latitude;
+  const resolvedIncidentLongitude = hasCoordinates
+    ? incidentDraft.longitude
+    : manualAddressCoordinate?.longitude;
+  const hasReportCoordinates = isValidCoordinate(
+    resolvedIncidentLatitude,
+    resolvedIncidentLongitude
+  );
 
-  if (!hasCoordinates) {
-    nextErrors.location = "Tap the map or use current location to set coordinates.";
+  if (!hasReportCoordinates) {
+    nextErrors.location = incidentDebugMode
+      ? "Tap the map or use current location to set coordinates."
+      : "Use current location to verify you are inside Jaen.";
   }
 
-  const reportPointInsideJaen = isPointInsideJaenBoundary({
-    latitude: Number(incidentDraft.latitude),
-    longitude: Number(incidentDraft.longitude),
-  });
+  const reportPointInsideJaen = Boolean(
+    findBarangayFeatureByCoordinate(
+      resolvedIncidentLatitude,
+      resolvedIncidentLongitude,
+      homepageBarangays.map((barangay) => barangay.feature)
+    )
+  );
 
-  if (!(reportPointInsideJaen || incidentDebugMode)) {
-    nextErrors.location = "You are outside Jaen. Reporting is disabled.";
+  if (hasReportCoordinates && !(reportPointInsideJaen || incidentDebugMode)) {
+    nextErrors.location = "Reports can only be given inside Jaen";
   }
 
   if (cleanDescription.length < 5) {
-    nextErrors.description = "Description/reason must be at least 5 characters.";
+    nextErrors.description = "Description must at least contain 5 characters";
   }
 
   if (!incidentImage?.uri) {
@@ -3680,8 +3716,8 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
       street: cleanStreet,
       streetAddress: cleanStreet,
       location: cleanLocation,
-      latitude: incidentDraft.latitude,
-      longitude: incidentDraft.longitude,
+      latitude: resolvedIncidentLatitude,
+      longitude: resolvedIncidentLongitude,
       description: cleanDescription,
       usernames: incidentDraft.usernames || user?.username || "",
       phone: incidentDraft.phone || user?.phone || "",
@@ -3761,6 +3797,7 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
   incidentDraft,
   incidentDebugMode,
   incidentImage,
+  homepageBarangays,
   refreshIncidents,
   setIncidents,
   user?.phone,
@@ -3856,34 +3893,40 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
     const isSelected = selectedBarangay?.id === barangay.id;
     const isVisibilitySelected =
       isBarangay && selectedBarangayIdSet.has(barangay.id);
-    const isVisibilityMuted = isBarangay && !isVisibilitySelected;
+    const isVisibilityMuted = isBarangaySelectionMode && !isVisibilitySelected;
+    const isEvacBarangayLayer = isEvac;
     const allowBarangayPolygonPress = isBarangay || (!isIncident && !isEvac);
     const reportStats = incidentBarangayCounts[barangay.id] || {};
     const reportCount = Number(reportStats.count || 0);
     const heatStyle = getHeatStyle(reportCount, maxBarangayIncidentCount, isSelected);
-    const strokeColor = isBarangay
-      ? isVisibilityMuted
-        ? "rgba(15, 23, 42, 0.34)"
-        : barangay.color
-      : heatStyle.strokeColor;
-    const fillColor = isBarangay
-      ? isVisibilityMuted
-        ? "rgba(15, 23, 42, 0.22)"
-        : isVisibilitySelected
-          ? barangay.selectedFillColor
-          : barangay.fillColor
-      : heatStyle.fillColor;
-    const strokeWidth = isBarangay
-      ? isVisibilityMuted
-        ? 1
-        : isVisibilitySelected
-          ? 2.6
-          : 1.2
-      : heatStyle.strokeWidth;
+    const strokeColor =
+      isBarangay || isEvacBarangayLayer
+        ? isVisibilityMuted
+          ? "rgba(15, 23, 42, 0.34)"
+          : barangay.color
+        : heatStyle.strokeColor;
+    const fillColor =
+      isBarangay || isEvacBarangayLayer
+        ? isVisibilityMuted
+          ? "rgba(15, 23, 42, 0.22)"
+          : isVisibilitySelected
+            ? barangay.selectedFillColor
+            : barangay.fillColor
+        : heatStyle.fillColor;
+    const strokeWidth =
+      isBarangay || isEvacBarangayLayer
+        ? isVisibilityMuted
+          ? 1
+          : isVisibilitySelected
+            ? 2.6
+            : isEvacBarangayLayer
+              ? 1.65
+              : 1.2
+        : heatStyle.strokeWidth;
 
     return (
       <React.Fragment key={`home-brgy-wrap-${barangay.id}`}>
-        {isBarangay && isVisibilitySelected && (
+        {isBarangaySelectionMode && isVisibilitySelected && (
           <Polygon
             key={`barangay-filter-glow-${barangay.id}`}
             coordinates={barangay.mainRing}
@@ -3922,9 +3965,9 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
           onPress={
             allowBarangayPolygonPress
               ? () => {
-                  if (isBarangay) {
+                  if (isBarangaySelectionMode) {
                     toggleBarangayVisibility(barangay.id);
-                  } else {
+                  } else if (!isBarangay) {
                     handleSelectBarangay(barangay);
                   }
                 }
@@ -3937,9 +3980,11 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
                 : isVisibilityMuted
                   ? 52
                   : 56
-              : isSelected
-                ? 28
-                : 18
+              : isEvacBarangayLayer
+                ? 54
+                : isSelected
+                  ? 28
+                  : 18
           }
         />
       </React.Fragment>
@@ -3969,7 +4014,8 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
                 key={place?._id || `${place.latitude}-${place.longitude}`}
                 coordinate={markerCoordinate}
                 anchor={{ x: 0.5, y: 1 }}
-                tracksViewChanges={false}
+                zIndex={isSelected ? 320 : 300}
+                tracksViewChanges={isSelected}
                 onPress={() => handleEvacMarkerPress(place)}
               >
                 <EvacuationPlaceMarker
@@ -4027,9 +4073,9 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
             isEvac || isBarangay ? "" : incidentBarangayCounts[barangay.id]?.dominantIncidentLabel || ""
           }
           onPress={() => {
-            if (isBarangay) {
+            if (isBarangay && hasBarangayVisibilityFilter) {
               toggleBarangayVisibility(barangay.id);
-            } else if (!isEvac) {
+            } else if (!isEvac && !isBarangay) {
               handleSelectBarangay(barangay);
             }
           }}
@@ -4168,6 +4214,8 @@ if (!incidentDebugMode && !isPointInsideJaenBoundary({ latitude, longitude })) {
           barangayCount={displayedBarangayCount}
           barangayLegend={barangayLegend}
           selectedBarangayIds={selectedBarangayIds}
+          barangaySpecificMode={barangaySpecificMode}
+          setBarangaySpecificMode={setBarangaySpecificMode}
           onToggleBarangayVisibility={toggleBarangayVisibility}
           onClearBarangayVisibilityFilter={clearBarangayVisibilityFilter}
           evac={normalizedSelectedEvac}
@@ -4252,6 +4300,8 @@ function ModulePanel({
   barangayCount,
   barangayLegend,
   selectedBarangayIds,
+  barangaySpecificMode,
+  setBarangaySpecificMode,
   onToggleBarangayVisibility,
   onClearBarangayVisibilityFilter,
   evac,
@@ -4311,11 +4361,14 @@ function ModulePanel({
   const handlePanelBack = useCallback(() => {
     if (activeModule === "barangay" && barangayFilterOpen) {
       setBarangayFilterOpen(false);
+      if (!(selectedBarangayIds || []).length) {
+        setBarangaySpecificMode?.(false);
+      }
       return;
     }
 
     onBack?.();
-  }, [activeModule, barangayFilterOpen, onBack]);
+  }, [activeModule, barangayFilterOpen, onBack, selectedBarangayIds, setBarangaySpecificMode]);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const lastNavigationPanelY = useRef(NAV_PANEL_DEFAULT_OFFSET);
   const isNavigationPanelActiveRef = useRef(false);
@@ -4843,17 +4896,10 @@ function ModulePanel({
         ]}
       >
         {incidentDebugMode
-          ? "Debug Mode ON: Location restriction disabled."
-          : "You are outside Jaen. Reporting is disabled."}
+          ? "Debug Mode ON: map test location enabled."
+          : "Debug Mode OFF: using your real phone location."}
       </Text>
     </TouchableOpacity>
-
-    {!incidentDebugMode && selectedIncidentCoordinate && incidentPointInsideJaen && (
-      <View style={styles.locationAllowedCard}>
-        <Ionicons name="checkmark-circle-outline" size={17} color="#166534" />
-        <Text style={styles.locationAllowedText}>Location is inside Jaen. Reporting is enabled.</Text>
-      </View>
-    )}
 
     {incidentPanelTab === "report" && (
       <>
@@ -4993,8 +5039,12 @@ function ModulePanel({
 
           <Text style={styles.locationStatusText}>
             {selectedIncidentCoordinate
-              ? "Map point set for this report."
-              : "No map point yet. Tap the map or use current location."}
+              ? incidentDebugMode
+                ? "Debug map point set for this report."
+                : "Phone location set for this report."
+              : incidentDebugMode
+                ? "No map point yet. Tap the map or use current location."
+                : "No phone location yet. Use current location to report."}
           </Text>
           {!!incidentErrors?.location && <Text style={styles.validationText}>{incidentErrors.location}</Text>}
 
@@ -5075,9 +5125,9 @@ function ModulePanel({
         <TouchableOpacity
           style={[
             styles.primaryBtn,
-            (incidentBusy || !canSubmitIncidentFromLocation) && styles.disabledBtn,
+            incidentBusy && styles.disabledBtn,
           ]}
-          disabled={incidentBusy || !canSubmitIncidentFromLocation}
+          disabled={incidentBusy}
           onPress={submitIncident}
         >
           <Text style={styles.primaryText}>{incidentBusy ? "Submitting..." : "Submit incident"}</Text>
@@ -5229,14 +5279,18 @@ function ModulePanel({
                 <View style={styles.barangayFilterTitleBlock}>
                   <Text style={[styles.sectionLabel, themedOverlay.text]}>Barangay visibility</Text>
                   <Text style={[styles.panelNote, themedOverlay.subtext]}>
-                    Pick one or more barangays to highlight. Others stay as soft shadow outlines.
+                    Show all barangays by default, or choose specific barangays to focus.
                   </Text>
                 </View>
-                {(selectedBarangayIds || []).length > 0 && (
+                {barangaySpecificMode && (
                   <TouchableOpacity
                     activeOpacity={0.82}
                     style={styles.barangayClearChip}
-                    onPress={onClearBarangayVisibilityFilter}
+                    onPress={() => {
+                      onClearBarangayVisibilityFilter?.();
+                      setBarangaySpecificMode?.(false);
+                      setBarangayFilterOpen(false);
+                    }}
                   >
                     <Text style={styles.barangayClearChipText}>Show all</Text>
                   </TouchableOpacity>
@@ -5246,19 +5300,31 @@ function ModulePanel({
               <TouchableOpacity
                 activeOpacity={0.88}
                 style={styles.barangayFilterButton}
-                onPress={() => setBarangayFilterOpen((prev) => !prev)}
+                onPress={() => {
+                  setBarangayFilterOpen((prev) => {
+                    const nextOpen = !prev;
+                    setBarangaySpecificMode?.(
+                      nextOpen || (selectedBarangayIds || []).length > 0
+                    );
+                    return nextOpen;
+                  });
+                }}
               >
                 <View style={styles.barangayFilterButtonIcon}>
                   <Ionicons name="layers-outline" size={18} color="#14532D" />
                 </View>
                 <View style={styles.barangayFilterButtonCopy}>
                   <Text style={styles.barangayFilterButtonTitle}>
-                    {(selectedBarangayIds || []).length
-                      ? `${selectedBarangayIds.length} selected`
-                      : "Choose barangays"}
+                    {barangaySpecificMode
+                      ? (selectedBarangayIds || []).length
+                        ? `${selectedBarangayIds.length} selected`
+                        : "Choose specific barangays"
+                      : "Show all barangays"}
                   </Text>
                   <Text style={styles.barangayFilterButtonMeta}>
-                    Tap outlines or use this list
+                    {barangaySpecificMode
+                      ? "Unselected areas become muted"
+                      : "Tap to choose specific barangays"}
                   </Text>
                 </View>
                 <Ionicons
@@ -5307,14 +5373,34 @@ function ModulePanel({
                   })}
                 </View>
               )}
+
+
+              <View style={styles.incidentToggleRow}>
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  style={[styles.mapToggleBtn, showBarangayMarkers && styles.mapToggleBtnActive]}
+                  onPress={() => setShowBarangayMarkers((prev) => !prev)}
+                >
+                  <Ionicons name="pricetag-outline" size={17} color={showBarangayMarkers ? "#FFFFFF" : "#14532D"} />
+                  <Text style={[styles.mapToggleText, showBarangayMarkers && styles.mapToggleTextActive]}>Barangay Labels</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  style={[styles.mapToggleBtn, showIncidentMarkers && styles.mapToggleBtnActive]}
+                  onPress={() => setShowIncidentMarkers((prev) => !prev)}
+                >
+                  <Ionicons name="warning-outline" size={17} color={showIncidentMarkers ? "#FFFFFF" : "#14532D"} />
+                  <Text style={[styles.mapToggleText, showIncidentMarkers && styles.mapToggleTextActive]}>Incident Pins</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={[styles.panelSection, themedOverlay.section]}>
               <Text style={[styles.sectionLabel, themedOverlay.text]}>Map style</Text>
-              <LegendRow color={homepageBarangays[0]?.color || "#22C55E"} label="Selected barangay uses its assigned color" />
-              <LegendRow color="rgba(15, 23, 42, 0.34)" label="Unselected shadow outline and area" />
+              <LegendRow color={homepageBarangays[0]?.color || "#22C55E"} label="All barangays use their assigned colors by default" />
+              <LegendRow color="rgba(15, 23, 42, 0.34)" label="Specific mode mutes unselected barangays" />
               <Text style={[styles.panelNote, themedOverlay.subtext]}>
-                The map stays zoomed out for Jaen context. Selection changes visibility only.
+                Show all keeps the entire Jaen map visible. Specific selection focuses only the chosen barangays.
               </Text>
             </View>
           </ScrollView>
@@ -7159,18 +7245,18 @@ const styles = StyleSheet.create({
   },
 
   evacMarkerPin: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#ffffff",
-    borderWidth: 2.5,
+    borderWidth: 3,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.16,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
 
   evacMarkerPinSelected: {
@@ -7178,22 +7264,20 @@ const styles = StyleSheet.create({
   },
 
   evacMarkerCore: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 27,
+    height: 27,
+    borderRadius: 13.5,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  evacMarkerPointer: {
-    marginTop: -2,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 7,
-    borderRightWidth: 7,
-    borderTopWidth: 10,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
+  evacMarkerBaseShadow: {
+    width: 18,
+    height: 5,
+    borderRadius: 999,
+    marginTop: 3,
+    opacity: 0.24,
+    transform: [{ scaleX: 1.35 }],
   },
 
 barangayMarkerShell: {

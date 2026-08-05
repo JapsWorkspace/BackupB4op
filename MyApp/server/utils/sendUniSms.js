@@ -11,6 +11,10 @@ const fetch = require("node-fetch");
 const SMS_LOG_DIR = path.join(__dirname, "..", "logs");
 const SMS_LOG_FILE = path.join(SMS_LOG_DIR, "sms.log");
 
+function getSmsProvider() {
+  return String(process.env.SMS_PROVIDER || "unisms").trim().toLowerCase();
+}
+
 function getUniSmsApiBaseUrl() {
   return String(
     process.env.UNISMS_API_BASE_URL ||
@@ -37,6 +41,27 @@ function getUniSmsSecretKey() {
 function getUniSmsSenderId() {
   const configured = String(process.env.UNISMS_SENDER_ID || "").trim();
   return configured || "Unisoft";
+}
+
+
+function getTextBeeApiBaseUrl() {
+  return String(process.env.TEXTBEE_API_BASE_URL || "https://api.textbee.dev/api/v1")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function getTextBeeDeviceId() {
+  return String(process.env.TEXTBEE_DEVICE_ID || "").trim();
+}
+
+function getTextBeeApiKey() {
+  return String(process.env.TEXTBEE_API_KEY || "").trim();
+}
+
+function getTextBeeSendUrl() {
+  return `${getTextBeeApiBaseUrl()}/gateway/devices/${encodeURIComponent(
+    getTextBeeDeviceId()
+  )}/send-sms`;
 }
 
 function getProviderErrorMessage(data, fallback) {
@@ -127,7 +152,149 @@ function normalizePhilippinePhoneNumber(phone) {
   return "";
 }
 
+async function sendTextBeeSms({ to, message, metadata = {} }) {
+  const apiKey = getTextBeeApiKey();
+  const deviceId = getTextBeeDeviceId();
+  const maxLength = getSmsMaxLength();
+
+  logSmsEvent("sms config", {
+    provider: "textbee",
+    hasToken: Boolean(apiKey),
+    apiBaseUrl: getTextBeeApiBaseUrl(),
+    deviceId: deviceId ? `${deviceId.slice(0, 6)}...${deviceId.slice(-4)}` : "",
+    phoneFormat: "e164",
+    maxLength: String(maxLength),
+  });
+
+  if (!apiKey || !deviceId) {
+    logSmsEvent("sms skipped missing token", { provider: "textbee" });
+    return {
+      ok: false,
+      skipped: true,
+      provider: "textbee",
+      reason: !apiKey ? "missing_token" : "missing_device_id",
+    };
+  }
+
+  const normalizedTo = normalizePhilippinePhoneNumber(to);
+
+  logSmsEvent("sms normalized phone", {
+    provider: "textbee",
+    normalizedPhone: normalizedTo,
+    providerPhone: normalizedTo,
+  });
+
+  if (!normalizedTo) {
+    logSmsEvent("sms skipped missing/invalid phone", {
+      provider: "textbee",
+      normalizedPhone: normalizedTo,
+      providerPhone: normalizedTo,
+    });
+    return {
+      ok: false,
+      skipped: true,
+      provider: "textbee",
+      reason: "invalid_phone",
+    };
+  }
+
+  const finalMessage = trimSmsMessage(message, maxLength);
+  const body = {
+    recipients: [normalizedTo],
+    message: finalMessage,
+    ...(metadata && Object.keys(metadata).length ? { metadata } : {}),
+  };
+
+  try {
+    logSmsEvent("sms sending", {
+      provider: "textbee",
+      normalizedPhone: normalizedTo,
+      providerPhone: normalizedTo,
+      length: finalMessage.length,
+    });
+
+    const response = await fetch(getTextBeeSendUrl(), {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    logSmsEvent("sms provider response", {
+      provider: "textbee",
+      status: response.status,
+      data,
+    });
+
+    if (!response.ok) {
+      const errorMessage = getProviderErrorMessage(
+        data,
+        `TextBee request failed (${response.status})`
+      );
+      logSmsEvent("sms failed", {
+        provider: "textbee",
+        status: response.status,
+        data,
+        length: finalMessage.length,
+        normalizedPhone: normalizedTo,
+        providerPhone: normalizedTo,
+        message: errorMessage,
+      });
+      return {
+        ok: false,
+        skipped: false,
+        provider: "textbee",
+        reason: "provider_error",
+        status: response.status,
+        errorMessage,
+        data,
+      };
+    }
+
+    logSmsEvent("sms sent", {
+      provider: "textbee",
+      normalizedPhone: normalizedTo,
+      providerPhone: normalizedTo,
+      status: response.status,
+    });
+
+    return {
+      ok: true,
+      skipped: false,
+      provider: "textbee",
+      to: normalizedTo,
+      providerTo: normalizedTo,
+      message: finalMessage,
+      data,
+    };
+  } catch (err) {
+    logSmsEvent("sms failed", {
+      provider: "textbee",
+      normalizedPhone: normalizedTo,
+      providerPhone: normalizedTo,
+      length: finalMessage.length,
+      message: err?.message || String(err),
+    });
+    return {
+      ok: false,
+      skipped: false,
+      provider: "textbee",
+      reason: "send_failed",
+      errorMessage: err?.message || String(err),
+    };
+  }
+}
+
 async function sendUniSms({ to, message, metadata = {} }) {
+  if (getSmsProvider() === "textbee") {
+    return sendTextBeeSms({ to, message, metadata });
+  }
+
   const secretKey = getUniSmsSecretKey();
   const senderId = getUniSmsSenderId();
   const maxLength = getSmsMaxLength();
@@ -143,7 +310,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
 
   if (!secretKey) {
     logSmsEvent("sms skipped missing token", { provider: "unisms" });
-    return { ok: false, skipped: true, reason: "missing_token" };
+    return { ok: false, skipped: true, provider: "unisms", reason: "missing_token" };
   }
 
   const normalizedTo = normalizePhilippinePhoneNumber(to);
@@ -158,7 +325,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
       normalizedPhone: normalizedTo,
       providerPhone: normalizedTo,
     });
-    return { ok: false, skipped: true, reason: "invalid_phone" };
+    return { ok: false, skipped: true, provider: "unisms", reason: "invalid_phone" };
   }
 
   const finalMessage = trimSmsMessage(message, maxLength);
@@ -216,6 +383,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
       return {
         ok: false,
         skipped: false,
+        provider: "unisms",
         reason: "provider_error",
         status: response.status,
         errorMessage,
@@ -233,6 +401,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
     return {
       ok: true,
       skipped: false,
+      provider: "unisms",
       to: normalizedTo,
       providerTo: normalizedTo,
       message: finalMessage,
@@ -249,6 +418,7 @@ async function sendUniSms({ to, message, metadata = {} }) {
     return {
       ok: false,
       skipped: false,
+      provider: "unisms",
       reason: "send_failed",
       errorMessage: err?.message || String(err),
     };
@@ -266,6 +436,8 @@ async function checkUniSmsBalance() {
 
 module.exports = {
   checkUniSmsBalance,
+  getSmsProvider,
+  sendTextBeeSms,
   sendUniSms,
   normalizePhilippinePhoneNumber,
   trimSmsMessage,
